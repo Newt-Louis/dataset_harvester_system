@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.settings import settings
+from schemas.payloads import HarvesterResponse
+
 app = FastAPI(
     title="AI Dataset Harvester API",
     description="Core engine cho việc gọi đa model AI (Gemini, Groq, OpenRouter...)",
@@ -11,7 +14,7 @@ app = FastAPI(
 # noinspection PyTypeChecker
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Chỉ cho phép Vue gọi sang
+    allow_origins=settings.CORS_ORIGINS,  # Chỉ cho phép Vue gọi sang
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,12 +31,21 @@ async def root():
 
 
 # Chuẩn bị sẵn một endpoint (đường dẫn) để sau này nhận yêu cầu từ Vue
-@app.post("/api/generate")
+@app.post("/api/generate", response_model=HarvesterResponse)
 async def generate_dataset(request_data: dict):
     print("Dữ liệu nhận từ UI:", request_data)
-
-    return {
-        "status": "processing",
-        "message": "Đã nhận yêu cầu sinh dữ liệu. Đang gọi AI...",
-        "received_data": request_data
-    }
+    final_data, file_path = await run_harvester_engine(request_data)
+    total_generated = len(final_data)
+    if total_generated == 0:
+        return HarvesterResponse(
+            status="error",
+            message="Quá trình sinh dữ liệu thất bại. Các Model AI trả về sai định dạng hoặc lỗi kết nối.",
+            total_generated=0,
+            file_url=""
+        )
+    return HarvesterResponse(
+        status="success",
+        message=f"Thành công! Đã sinh {total_generated} mẫu dữ liệu ra file {request_data.format.upper()}.",
+        total_generated=total_generated,
+        file_url=f"/{file_path}"
+    )
