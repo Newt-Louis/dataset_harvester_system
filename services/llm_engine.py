@@ -102,23 +102,18 @@ async def run_harvester_engine(request: HarvesterRequest):
     """Hàm tổng phối (Orchestrator): Chạy đồng thời tất cả các seeds"""
 
     # Tạo danh sách các công việc (Tasks)
-    tasks = []
+    flattened_data = []
 
     # Ở đây tôi đang hardcode model miễn phí của Google qua OpenRouter để test
     # Sau này ta có thể làm tính năng xoay tua model ở đây
     target_model = "openrouter/google/gemma-2-9b-it:free"
 
-    for seed in request.seeds:
-        task = asyncio.create_task(generate_single_seed(seed, request, target_model))
-        tasks.append(task)
-
-    # Chạy TẤT CẢ cùng lúc và đợi kết quả (Tốc độ ánh sáng là đây!)
-    results = await asyncio.gather(*tasks)
-
-    # Gom tất cả mảng con thành 1 mảng lớn duy nhất
-    flattened_data = []
-    for res in results:
-        flattened_data.extend(res)
+    for idx, seed in enumerate(request.seeds):
+        res = await generate_single_seed(seed, request, target_model)
+        if res:
+            flattened_data.extend(res)
+        if idx < len(request.seeds) - 1:
+            await asyncio.sleep(3)
 
     # Lưu ra file
     file_path = save_to_file(flattened_data, request.format)

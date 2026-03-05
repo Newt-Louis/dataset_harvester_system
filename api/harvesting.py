@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from schemas.payloads import HarvesterRequest, HarvesterResponse
 from services.llm_engine import run_harvester_engine
 
-router = APIRouter()
+router = APIRouter(prefix="/api", tags=["Harvesting"])
 
 @router.post("/generate", response_model=HarvesterResponse)
 async def generate_dataset(request_data: HarvesterRequest):

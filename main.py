@@ -1,8 +1,9 @@
+import importlib
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from core.settings import settings
-from api import home,harvesting
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(
     title="AI Dataset Harvester API",
@@ -20,5 +21,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(home.router, tags=["Home"])
-app.include_router(harvesting.router, prefix="/api", tags=["Harvesting"])
+app.mount("/downloads", StaticFiles(directory="downloads"), name="downloads")
+
+def include_routers_automatically():
+    api_dir = Path(__file__).parent / "api"
+
+    for file in api_dir.glob("*.py"):
+        if file.name.startswith("__"):
+            continue
+
+        # Lấy tên module (Ví dụ: từ api/home.py -> api.home)
+        module_name = f"api.{file.stem}"
+
+        try:
+            module = importlib.import_module(module_name)
+            if hasattr(module, "router"):
+                app.include_router(module.router)
+        except Exception as e:
+            print(f"⚠️ Không thể load route từ {file.name}: {e}")
+
+include_routers_automatically()
