@@ -1,24 +1,19 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 from schemas.payloads import HarvesterRequest, HarvesterResponse
 from services.llm_engine import run_harvester_engine
 
 router = APIRouter(prefix="/api", tags=["Harvesting"])
 
 @router.post("/generate", response_model=HarvesterResponse)
-async def generate_dataset(request_data: HarvesterRequest):
-    print("Dữ liệu nhận từ UI:", request_data)
-    final_data, file_path = await run_harvester_engine(request_data)
-    total_generated = len(final_data) if final_data else 0
-    if total_generated == 0:
+async def generate_dataset(request_data: HarvesterRequest, background_tasks: BackgroundTasks):
+    active_keys = [config for config in request_data.api_configs if config.isActive]
+    if not active_keys:
         return HarvesterResponse(
             status="error",
-            message="Quá trình sinh dữ liệu thất bại. Các Model AI trả về sai định dạng hoặc lỗi kết nối.",
-            total_generated=0,
-            file_url=""
+            message="Thất bại: Bạn chưa bật API Key nào trong phần Cấu hình!"
         )
+    background_tasks.add_task(run_harvester_engine, request_data, active_keys)
     return HarvesterResponse(
-        status="success",
-        message=f"Thành công! Đã sinh {total_generated} mẫu dữ liệu ra file {request_data.format.upper()}.",
-        total_generated=total_generated,
-        file_url=f"/{file_path}"
+        status="processing",
+        message=f"Hệ thống đã đưa vào hàng đợi chạy nền! Quá trình sẽ sử dụng {len(active_keys)} API Key xoay vòng. Bạn có thể tắt thông báo này và làm việc khác."
     )
