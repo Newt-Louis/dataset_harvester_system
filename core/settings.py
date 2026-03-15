@@ -15,4 +15,13 @@ class Settings:
     MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", 5))
     TIMEOUT_SECONDS = int(os.getenv("TIMEOUT_SECONDS", 60))
 
+    DATABASE_URL = os.getenv(
+        "DATABASE_URL",
+        "sqlite:///./database/dataset_harvester.db"
+    )
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+    JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-key-for-local-dev-only")
+    FERNET_KEY = os.getenv("FERNET_KEY", "uE2d3_z6iW-N2U9D8fC6mQ5J8sP0kX2yZ1bH7vN3M4=")
 settings = Settings()
