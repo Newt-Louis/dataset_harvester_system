@@ -3,3 +3,28 @@
 .idea
 .vscode
 .env*
+ENV/
+env/
+*.iml
+.mypy_cache/
+.ruff_cache/
+.pyright/
+
+# ===== Python bytecode / cache =====
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ===== Python build / packaging =====
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ===== Logs =====
+*.log
+
+# ===== OS / Editor =====
+.DS_Store
+Thumbs.db
