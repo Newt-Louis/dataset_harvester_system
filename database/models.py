@@ -68,3 +68,35 @@ class HarvestHistory(Base):
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     owner = relationship("User", back_populates="harvest_histories")
+
+
+class HarvestJob(Base):
+    __tablename__ = "harvest_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Thông tin công việc
+    prompt = Column(Text, nullable=False)
+    total_seeds = Column(Integer, nullable=False)
+    target_samples_per_seed = Column(Integer, nullable=False)
+    output_format = Column(String, nullable=False)
+
+    # Thông tin Tiến trình (Cập nhật liên tục bởi llm_engine)
+    status = Column(String, default="pending")  # pending, running, completed, failed
+    current_seed_index = Column(Integer, default=0)
+    current_provider = Column(String, default="")
+    current_model = Column(String, default="")
+    samples_generated = Column(Integer, default=0)
+
+    # Lịch sử log (Lưu dạng chuỗi JSON hoặc Text để hiện lên UI)
+    log_messages = Column(Text, default="[]")
+
+    # Kết quả
+    output_file_url = Column(String, nullable=True)  # Link tải file hoặc link Drive
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+
+    owner = relationship("User", backref="harvest_jobs")

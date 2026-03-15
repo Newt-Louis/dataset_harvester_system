@@ -20,6 +20,7 @@ FERNET_KEY = os.getenv("FERNET_KEY", "").encode()
 fernet = Fernet(FERNET_KEY) if FERNET_KEY else None
 
 bearer_scheme = HTTPBearer()
+bearer_scheme_optional = HTTPBearer(auto_error=False)
 
 def hash_password(password: str) -> str:
     pwd_bytes = password.encode('utf-8')
@@ -63,8 +64,20 @@ def get_current_user(
     user_id = decode_token(credentials.credentials)
     user: Any | None = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Không tìm thấy user")
+        raise HTTPException(status_code=401, detail="Không tìm thấy user")
     return user
+
+def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme_optional),
+    db: Session = Depends(get_db)
+):
+    if not credentials:
+        return None
+    try:
+        user_id = decode_token(credentials.credentials)
+        return db.query(models.User).filter(models.User.id == user_id).first()
+    except HTTPException:
+        return None
 
 # ---------------------------------------------------------------
 # Encrypt / Decrypt API Key

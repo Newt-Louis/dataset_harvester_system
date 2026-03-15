@@ -31,10 +31,11 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         or_(models.User.email == req.email, models.User.username == auto_username)
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email đã được đăng ký")
+        raise HTTPException(status_code=400, detail="Email hoặc Username này đã được sử dụng")
 
     # Tạo user mới
     user = models.User(
+        username=auto_username,
         email=req.email,
         hashed_password=security.hash_password(req.password)
     )
