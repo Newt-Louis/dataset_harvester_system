@@ -9,6 +9,7 @@ from database.database import SessionLocal
 from database.models import ApiConfig
 from services.job_tracker import JobTracker
 from schemas.payloads import HarvesterRequest
+from services.storage_service import StorageManager
 
 # Đảm bảo thư mục lưu file tồn tại
 os.makedirs("downloads", exist_ok=True)
@@ -122,9 +123,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
 
         # Xong việc -> Lưu file
         if flattened_data:
-            file_path = save_to_file(flattened_data, request.format)
-            download_url = f"http://localhost:8000/{file_path}"
-            tracker.mark_completed(download_url)
+            StorageManager.save_dataset(tracker, flattened_data, request.format)
         else:
             tracker.mark_failed("Quá trình chạy hoàn tất nhưng không sinh được dữ liệu hợp lệ nào.")
 

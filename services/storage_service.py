@@ -7,14 +7,12 @@ try:
     from google.oauth2 import service_account
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaIoBaseUpload
-
     HAS_GDRIVE = True
 except ImportError:
     HAS_GDRIVE = False
 
 try:
     import boto3
-
     HAS_S3 = True
 except ImportError:
     HAS_S3 = False
@@ -101,6 +99,6 @@ class StorageManager:
             except Exception as e:
                 print(f"⚠️ Lỗi S3 ({e}). Chuyển sang phương án Database...")
 
-        # 3. LƯU DATABASE (CỨU CÁNH CUỐI CÙNG - KHÔNG BAO GIỜ THẤT BẠI)
+        # 3. LƯU DATABASE
         print("💾 Đang lưu trực tiếp vào Database...")
         tracker.mark_completed_with_data(content, format_type)

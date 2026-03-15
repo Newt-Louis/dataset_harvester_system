@@ -7,10 +7,16 @@ class APIConfig(BaseModel):
     modelName: str
     isActive: bool = True
 
+class SeedItem(BaseModel):
+    """Một phần tử hạt giống bao gồm Bối cảnh và Chiến thuật tương ứng"""
+    context: str = Field(default="", description="Bối cảnh Schema (có thể để trống)")
+    rule: str = Field(..., description="Chiến thuật phân bổ (Bắt buộc)")
+
 class HarvesterRequest(BaseModel):
-    prompt: str = Field(..., description="Yêu cầu hệ thống và vai trò (System Prompt)")
-    seeds: List[str] = Field(..., description="Danh sách hạt giống")
+    role_prompt: str = Field(..., description="Vai trò của AI")
+    constraints_prompt: str = Field(..., description="Ràng buộc nghiêm ngặt")
     schema_definition: str = Field(..., alias="schema", description="Cấu trúc JSON mong muốn dạng chuỗi")
+    seeds: List[SeedItem] = Field(..., description="Danh sách các cặp Bối cảnh & Quy tắc")
     format: str = Field(..., description="Định dạng đầu ra: jsonl hoặc csv")
     samples: int = Field(..., description="Số lượng mẫu trên mỗi hạt giống")
 
