@@ -73,6 +73,7 @@ def get_optional_current_user(
 ):
     if not credentials:
         return None
+
     try:
         user_id = decode_token(credentials.credentials)
         return db.query(models.User).filter(models.User.id == user_id).first()
