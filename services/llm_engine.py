@@ -19,7 +19,6 @@ def extract_json_from_text(text: str):
         # Cố gắng parse luôn
         return json.loads(text)
     except json.JSONDecodeError:
-        # Nếu lỗi, dùng Regex tìm đoạn bắt đầu bằng [ và kết thúc bằng ]
         match = re.search(r'\[.*\]', text, re.DOTALL)
         if match:
             try:
@@ -75,47 +74,84 @@ async def generate_single_seed(seed: str, request: HarvesterRequest,
 
 
 def save_to_file(all_data: list, format_type: str):
-    """Hàm lưu dữ liệu ra file"""
-    if not all_data:
-        return None
-
+    # ... (code cũ giữ nguyên)
+    if not all_data: return None
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_path = f"downloads/dataset_{timestamp}.{format_type}"
-
     if format_type == "jsonl":
         with open(file_path, "w", encoding="utf-8") as f:
-            for item in all_data:
-                f.write(json.dumps(item, ensure_ascii=False) + "\n")
-
+            for item in all_data: f.write(json.dumps(item, ensure_ascii=False) + "\n")
     elif format_type == "csv":
-        # Tự động lấy các keys của object đầu tiên làm tiêu đề cột
         keys = all_data[0].keys()
         with open(file_path, "w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=keys)
             writer.writeheader()
             writer.writerows(all_data)
-
+    print(f"🎉 ĐÃ LƯU FILE THÀNH CÔNG TẠI: {file_path}")
     return file_path
 
 
-async def run_harvester_engine(request: HarvesterRequest):
-    """Hàm tổng phối (Orchestrator): Chạy đồng thời tất cả các seeds"""
-
-    # Tạo danh sách các công việc (Tasks)
+async def run_harvester_engine(request: HarvesterRequest, active_keys: list):
+    """Hàm chạy nền: Xử lý xoay vòng API Key"""
     flattened_data = []
+    current_key_idx = 0  # Bắt đầu với Key đầu tiên trong danh sách
 
-    # Ở đây tôi đang hardcode model miễn phí của Google qua OpenRouter để test
-    # Sau này ta có thể làm tính năng xoay tua model ở đây
-    target_model = "openrouter/google/gemma-2-9b-it:free"
+    for seed in request.seeds:
+        seed_success = False
+        attempts = 0
 
-    for idx, seed in enumerate(request.seeds):
-        res = await generate_single_seed(seed, request, target_model)
-        if res:
-            flattened_data.extend(res)
-        if idx < len(request.seeds) - 1:
-            await asyncio.sleep(3)
+        # Thử tối đa bằng đúng số lượng Key ta có (để tránh vòng lặp vô hạn nếu tất cả Key đều chết)
+        while not seed_success and attempts < len(active_keys):
+            # Lấy cấu hình Key hiện tại
+            config = active_keys[current_key_idx]
+            print(f"🔄 Đang xử lý hạt giống: {seed[:20]}... (Bằng model: {config.modelName})")
 
-    # Lưu ra file
-    file_path = save_to_file(flattened_data, request.format)
+            system_content = f"""{request.prompt}
+            BẮT BUỘC: Bạn phải sinh ra ĐÚNG {request.samples} mẫu.
+            BẮT BUỘC: Trả về DUY NHẤT một mảng JSON (JSON Array), KHÔNG in thêm văn bản thừa.
+            Cấu trúc JSON Schema:
+            {request.schema_definition}
+            """
 
-    return flattened_data, file_path
+            try:
+                # GỌI API VÀ TRUYỀN KEY ĐỘNG VÀO (Không xài .env nữa)
+                response = await acompletion(
+                    model=config.modelName,
+                    messages=[
+                        {"role": "system", "content": system_content},
+                        {"role": "user", "content": f"Chủ đề / Hạt giống của bạn là: {seed}"}
+                    ],
+                    api_key=config.apiKey,  # Quan trọng: Bơm Key từ Vuejs vào đây
+                    temperature=0.7,
+                )
+
+                raw_text = response.choices[0].message.content
+                parsed_data = extract_json_from_text(raw_text)
+
+                if parsed_data and isinstance(parsed_data, list):
+                    print(f"✅ Xong hạt giống: {seed[:20]} (Đã sinh {len(parsed_data)} mẫu)")
+                    flattened_data.extend(parsed_data)
+                    seed_success = True
+
+                    # Nghỉ 3s để bảo vệ Key hiện tại
+                    await asyncio.sleep(3)
+                else:
+                    raise Exception("AI trả về sai định dạng JSON.")
+
+            except Exception as e:
+                print(f"❌ Lỗi với Key/Model ({config.modelName}): {str(e)}")
+                # XOAY TUA: Chuyển sang Key tiếp theo
+                current_key_idx = (current_key_idx + 1) % len(active_keys)
+                attempts += 1
+                print(f"🔄 Tự động chuyển đổi sang Key/Model tiếp theo...")
+                await asyncio.sleep(1)  # Nghỉ 1 nhịp trước khi thử key mới
+
+        if not seed_success:
+            print(f"💀 BỎ QUA HẠT GIỐNG: {seed[:20]} (Tất cả các API Key đều thất bại)")
+
+    # Sau khi chạy hết tất cả hạt giống, lưu file
+    if flattened_data:
+        save_to_file(flattened_data, request.format)
+        # Ở bài sau ta sẽ thêm logic: Upload file này lên Google Drive ở ngay chỗ này!
+    else:
+        print("⚠️ Thu hoạch hoàn tất nhưng không có dữ liệu nào được sinh ra.")
