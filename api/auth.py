@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from pydantic import BaseModel, EmailStr
 from database.database import get_db
 from database import models
@@ -11,11 +12,11 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 # Schemas
 # ---------------------------------------------------------------
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    login_field: str
     password: str
 
 class TokenResponse(BaseModel):
@@ -24,8 +25,11 @@ class TokenResponse(BaseModel):
 
 @router.post("/register", response_model=TokenResponse)
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
+    auto_username = req.email.split("@")[0]
     # Kiểm tra email đã tồn tại chưa
-    existing = db.query(models.User).filter(models.User.email == req.email).first()
+    existing = db.query(models.User).filter(
+        or_(models.User.email == req.email, models.User.username == auto_username)
+    ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email đã được đăng ký")
 
@@ -44,7 +48,12 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == req.email).first()
+    user = db.query(models.User).filter(
+        or_(
+            models.User.email == req.login_field,
+            models.User.username == req.login_field
+        )
+    ).first()
 
     if not user or not security.verify_password(req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
