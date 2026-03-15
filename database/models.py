@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from database.database import Base
 
 class User(Base):
@@ -9,9 +9,13 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    username = Column(String, unique=True, index=True)
 
     api_configs   = relationship("ApiConfig", back_populates="owner", cascade="all, delete")
+    harvester_state = relationship("HarvesterState", back_populates="owner", uselist=False,
+                                   cascade="all, delete-orphan")
     harvest_histories = relationship("HarvestHistory", back_populates="owner", cascade="all, delete-orphan")
 
 
@@ -24,6 +28,8 @@ class ApiConfig(Base):
     api_key = Column(String, nullable=False)   # Lưu encrypted (xem security.py)
     model_name = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     # Relationship ngược lại
     owner = relationship("User", back_populates="api_configs")
@@ -40,6 +46,8 @@ class HarvesterState(Base):
     output_format = Column(String, default="jsonl")
     output_schema = Column(Text, default="")
     samples = Column(Integer, default=10)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
     owner = relationship("User", back_populates="harvester_state")
 
@@ -57,6 +65,6 @@ class HarvestHistory(Base):
     output_schema = Column(Text, nullable=False)
     samples = Column(Integer, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     owner = relationship("User", back_populates="harvest_histories")
