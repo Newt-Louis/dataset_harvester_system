@@ -11,8 +11,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relationship: 1 user có nhiều api_configs
     api_configs   = relationship("ApiConfig", back_populates="owner", cascade="all, delete")
+    harvest_histories = relationship("HarvestHistory", back_populates="owner", cascade="all, delete-orphan")
 
 
 class ApiConfig(Base):
@@ -21,7 +21,7 @@ class ApiConfig(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     provider = Column(String, nullable=False)
-    api_key = Column(String, nullable=False)   # Lưu encrypted (xem auth.py)
+    api_key = Column(String, nullable=False)   # Lưu encrypted (xem security.py)
     model_name = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
 
@@ -42,3 +42,21 @@ class HarvesterState(Base):
     samples = Column(Integer, default=10)
 
     owner = relationship("User", back_populates="harvester_state")
+
+
+class HarvestHistory(Base):
+    __tablename__ = "harvest_histories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Lưu lại toàn bộ nội dung user đã submit để sau này làm Dataset
+    prompt = Column(Text, nullable=False)
+    seeds = Column(Text, nullable=False)
+    output_format = Column(String, nullable=False)
+    output_schema = Column(Text, nullable=False)
+    samples = Column(Integer, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="harvest_histories")

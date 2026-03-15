@@ -6,8 +6,6 @@ from core.settings import settings
 from fastapi.staticfiles import StaticFiles
 from database.database import engine, Base
 from database import models
-
-Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="AI Dataset Harvester API",
     description="Core engine cho việc gọi đa model AI (Gemini, Groq, OpenRouter...)",

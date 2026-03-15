@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
 from database.database import get_db
-from core.auth import get_current_user, encrypt_api_key, decrypt_api_key
+from core.security import get_current_user, encrypt_api_key, decrypt_api_key
 from database import models
 
 router = APIRouter(prefix="/api/configs", tags=["configs"])
