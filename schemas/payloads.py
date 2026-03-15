@@ -13,7 +13,6 @@ class HarvesterRequest(BaseModel):
     schema_definition: str = Field(..., alias="schema", description="Cấu trúc JSON mong muốn dạng chuỗi")
     format: str = Field(..., description="Định dạng đầu ra: jsonl hoặc csv")
     samples: int = Field(..., description="Số lượng mẫu trên mỗi hạt giống")
-    api_configs: List[APIConfig] = []
 
 class HarvesterResponse(BaseModel):
     status: str
