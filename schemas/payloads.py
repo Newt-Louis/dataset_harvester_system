@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 
 class APIConfig(BaseModel):
     provider: str
@@ -23,5 +23,4 @@ class HarvesterRequest(BaseModel):
 class HarvesterResponse(BaseModel):
     status: str
     message: str
-    total_generated: int
-    file_url: str = None
+    job_id: Optional[int] = None

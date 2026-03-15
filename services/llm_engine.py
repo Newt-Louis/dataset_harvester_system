@@ -1,9 +1,10 @@
 import asyncio, json, re, os, csv
 from datetime import datetime
 from litellm import acompletion
+from litellm.exceptions import AuthenticationError, RateLimitError, ContextWindowExceededError
 
 from core.settings import settings
-from core.prompts import build_harvester_system_prompt, build_harvester_user_prompt
+from core.prompts import build_dynamic_prompt
 from core.security import decrypt_api_key
 from database.database import SessionLocal
 from database.models import ApiConfig
@@ -67,36 +68,36 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
         if not active_configs:
             raise Exception("Bạn chưa có cấu hình API Key nào đang hoạt động.")
 
-        flattened_data = []
+        working_keys = list(active_configs)
         current_key_idx = 0
+        flattened_data = []
 
         tracker.job.status = "running"
         db.commit()
 
-        # Chuẩn bị System Prompt
-        system_content = build_harvester_system_prompt(request.prompt, request.samples, request.schema_definition)
+        for seed_idx, current_seed in enumerate(request.seeds):
+            if len(working_keys) == 0:
+                error_msg = f"Hệ thống dừng sớm tại #{seed_idx + 1}: Toàn bộ API Key của bạn đã hết lượt hoặc đạt giới hạn."
+                tracker.job.error_message = error_msg
+                break
 
-        for seed in request.seeds:
             seed_success = False
-            attempts = 0
+            keys_tried_for_this_seed = 0
 
-            while not seed_success and attempts < len(active_configs):
-                config = active_configs[current_key_idx]
+            current_prompt = build_dynamic_prompt(request, current_seed)
+
+            while not seed_success and keys_tried_for_this_seed < len(working_keys):
+                config = working_keys[current_key_idx]
 
                 # Giải mã API Key bằng Fernet
                 real_api_key = decrypt_api_key(config.api_key)
                 tracker.update_model(config.model_name)
 
-                print(f"🔄 Đang xử lý hạt giống: {seed[:20]}... (Model: {config.model_name})")
-
                 try:
                     async with semaphore:
                         response = await acompletion(
                             model=config.model_name,
-                            messages=[
-                                {"role": "system", "content": system_content},
-                                {"role": "user", "content": build_harvester_user_prompt(seed)}
-                            ],
+                            messages=[{"role": "user", "content": current_prompt}],
                             api_key=real_api_key,  # Bơm Key thật đã giải mã vào đây
                             temperature=0.7,
                         )
@@ -112,22 +113,34 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                     else:
                         raise Exception("AI trả về sai định dạng JSON.")
 
-                except Exception as e:
-                    print(f"❌ Lỗi Model {config.model_name}: {str(e)}")
-                    current_key_idx = (current_key_idx + 1) % len(active_configs)
-                    attempts += 1
-                    await asyncio.sleep(1)
 
-            if not seed_success:
-                print(f"💀 BỎ QUA HẠT GIỐNG: {seed[:20]}")
+                except AuthenticationError as e:
+                    working_keys.pop(current_key_idx)
+                except RateLimitError as e:
+                    working_keys.pop(current_key_idx)
+                except ContextWindowExceededError as e:
+                    break
+                except Exception as e:
+                    keys_tried_for_this_seed += 1
+                    current_key_idx = (current_key_idx + 1) % len(working_keys)
+                    await asyncio.sleep(1)
+                if working_keys:
+                    current_key_idx = current_key_idx % len(working_keys)
+
+            if not seed_success and working_keys:
+                continue
 
         # Xong việc -> Lưu file
         if flattened_data:
             StorageManager.save_dataset(tracker, flattened_data, request.format)
+            if tracker.job.error_message:
+                tracker.job.status = "failed"  # Đánh dấu đỏ trên UI
+            else:
+                tracker.job.status = "completed"
         else:
             tracker.mark_failed("Quá trình chạy hoàn tất nhưng không sinh được dữ liệu hợp lệ nào.")
 
     except Exception as e:
         tracker.mark_failed(str(e))
     finally:
-        db.close()  # RẤT QUAN TRỌNG: Làm xong phải dọn dẹp kết nối Database
+        db.close()  # RẤT QUAN TRỌNG: Dọn dẹp kết nối Database
