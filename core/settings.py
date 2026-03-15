@@ -24,4 +24,16 @@ class Settings:
 
     JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-key-for-local-dev-only")
     FERNET_KEY = os.getenv("FERNET_KEY", "uE2d3_z6iW-N2U9D8fC6mQ5J8sP0kX2yZ1bH7vN3M4=")
+
+    # --- CẤU HÌNH LƯU TRỮ (STORAGE) ---
+    # Google Drive
+    GDRIVE_FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "")
+    GDRIVE_CREDENTIALS_PATH = os.getenv("GDRIVE_CREDENTIALS_PATH", "gdrive_credentials.json")
+
+    # S3 (AWS, Cloudflare R2, Supabase...)
+    S3_ENDPOINT = os.getenv("S3_ENDPOINT", "")
+    S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "")
+    S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
+    S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "")
+    S3_PUBLIC_URL = os.getenv("S3_PUBLIC_URL", "")  # URL gốc để tạo link tải
 settings = Settings()

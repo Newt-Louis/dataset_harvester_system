@@ -1,5 +1,3 @@
-# backend/core/prompts.py
-
 def build_harvester_system_prompt(base_prompt: str, samples: int, schema_def: str) -> str:
     """Tạo System Prompt ép AI trả về chuẩn JSON Array"""
     return f"""{base_prompt}
