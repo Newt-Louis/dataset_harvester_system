@@ -15,7 +15,7 @@ class SeedItem(BaseModel):
 class HarvesterRequest(BaseModel):
     role_prompt: str = Field(..., description="Vai trò của AI")
     constraints_prompt: str = Field(..., description="Ràng buộc nghiêm ngặt")
-    schema_definition: str = Field(..., alias="schema", description="Cấu trúc JSON mong muốn dạng chuỗi")
+    schema_definition: str = Field(..., description="Cấu trúc JSON mong muốn dạng chuỗi")
     seeds: List[SeedItem] = Field(..., description="Danh sách các cặp Bối cảnh & Quy tắc")
     format: str = Field(..., description="Định dạng đầu ra: jsonl hoặc csv")
     samples: int = Field(..., description="Số lượng mẫu trên mỗi hạt giống")

@@ -6,7 +6,7 @@ from core.settings import settings
 try:
     from google.oauth2 import service_account
     from googleapiclient.discovery import build
-    from googleapiclient.http import MediaIoBaseUpload
+    from googleapiclient.http import MediaFileUpload
     HAS_GDRIVE = True
 except ImportError:
     HAS_GDRIVE = False
@@ -19,6 +19,33 @@ except ImportError:
 
 
 class StorageManager:
+    LOCAL_DATA_DIR = "local_datasets"
+
+    @classmethod
+    def append_to_local_file(cls, job_id: int, data_chunk: list, format_type: str) -> str:
+        """Ghi nối dữ liệu vào file vật lý trên server ngay khi sinh xong"""
+        if not data_chunk:
+            return ""
+
+        os.makedirs(cls.LOCAL_DATA_DIR, exist_ok=True)
+        file_path = os.path.join(cls.LOCAL_DATA_DIR, f"dataset_job_{job_id}.{format_type}")
+
+        # Kiểm tra file đã tồn tại hay chưa (để xử lý header cho CSV)
+        file_exists = os.path.exists(file_path)
+
+        with open(file_path, 'a', encoding='utf-8') as f:
+            if format_type == "jsonl":
+                for item in data_chunk:
+                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            elif format_type == "csv":
+                writer = csv.DictWriter(f, fieldnames=data_chunk[0].keys())
+                # Chỉ ghi Header nếu file mới được tạo lần đầu
+                if not file_exists or os.path.getsize(file_path) == 0:
+                    writer.writeheader()
+                writer.writerows(data_chunk)
+
+        return file_path
+
     @staticmethod
     def _convert_to_string(data: list, format_type: str) -> str:
         """Biến mảng JSON thành chuỗi trong RAM"""
@@ -34,7 +61,7 @@ class StorageManager:
         return ""
 
     @staticmethod
-    def _upload_to_gdrive(content_string: str, file_name: str, format_type: str) -> str:
+    def _upload_to_gdrive(file_path: str, file_name: str, format_type: str) -> str:
         """Bắn file lên Google Drive, trả về URL xem file"""
         scopes = ['https://www.googleapis.com/auth/drive.file']
         creds = service_account.Credentials.from_service_account_info(
@@ -43,8 +70,8 @@ class StorageManager:
         service = build('drive', 'v3', credentials=creds)
 
         # Biến chuỗi text thành đối tượng File-like trong RAM
-        media = MediaIoBaseUpload(io.BytesIO(content_string.encode('utf-8')),
-                                  mimetype='text/csv' if format_type == 'csv' else 'application/jsonl')
+        media = MediaFileUpload(file_path,
+                                  mimetype='text/csv' if format_type == 'csv' else 'application/jsonl',resumable=True)
 
         file_metadata = {'name': file_name, 'parents': [settings.GDRIVE_FOLDER_ID]}
 
@@ -52,7 +79,7 @@ class StorageManager:
         return uploaded_file.get('webViewLink')  # Trả về link Drive để click vào xem luôn
 
     @staticmethod
-    def _upload_to_s3(content_string: str, file_name: str, format_type: str) -> str:
+    def _upload_to_s3(file_path: str, file_name: str, format_type: str) -> str:
         """Bắn file lên S3, trả về URL tải xuống"""
         s3_client = boto3.client('s3',
                                  endpoint_url=settings.S3_ENDPOINT,
@@ -60,30 +87,32 @@ class StorageManager:
                                  aws_secret_access_key=settings.S3_SECRET_KEY
                                  )
         content_type = 'text/csv' if format_type == 'csv' else 'application/jsonl'
-        s3_client.put_object(
-            Bucket=settings.S3_BUCKET_NAME,
-            Key=file_name,
-            Body=content_string.encode('utf-8'),
-            ContentType=content_type
+        s3_client.upload_file(
+            file_path,
+            settings.S3_BUCKET_NAME,
+            file_name,
+            ExtraArgs={'ContentType': content_type}
         )
         # Ghép URL gốc với tên file
         return f"{settings.S3_PUBLIC_URL}/{file_name}"
 
     @classmethod
-    def save_dataset(cls, tracker, data: list, format_type: str):
-        """Cơ chế Thác Đổ: GDrive -> S3 -> Database"""
-        content = cls._convert_to_string(data, format_type)
-        if not content:
-            tracker.mark_failed("Không có dữ liệu hợp lệ để lưu.")
+    def finalize_dataset(cls, tracker, format_type: str):
+        """Hàm chốt sổ: Đẩy file từ Server lên Mây khi Job kết thúc hoặc bị hủy"""
+        file_path = os.path.join(cls.LOCAL_DATA_DIR, f"dataset_job_{tracker.job_id}.{format_type}")
+
+        # Kiểm tra xem file có tồn tại và có dữ liệu không
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+            tracker.mark_failed("Quá trình kết thúc nhưng không có dữ liệu hợp lệ được sinh ra.")
             return
 
         file_name = f"dataset_job_{tracker.job_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format_type}"
 
         # 1. THỬ GOOGLE DRIVE
-        if HAS_GDRIVE and settings.GDRIVE_FOLDER_ID and os.path.exists(settings.GDRIVE_CREDENTIALS_PATH):
+        if HAS_GDRIVE and settings.GDRIVE_FOLDER_ID and settings.GDRIVE_CREDENTIALS_JSON:
             try:
-                print("☁️ Đang lưu lên Google Drive...")
-                url = cls._upload_to_gdrive(content, file_name, format_type)
+                print("☁️ Đang tải file local lên Google Drive...")
+                url = cls._upload_to_gdrive(file_path, file_name, format_type)
                 tracker.mark_completed_with_url(url)
                 return
             except Exception as e:
@@ -92,13 +121,15 @@ class StorageManager:
         # 2. THỬ S3
         if HAS_S3 and settings.S3_BUCKET_NAME and settings.S3_ACCESS_KEY:
             try:
-                print("☁️ Đang lưu lên S3 Object Storage...")
-                url = cls._upload_to_s3(content, file_name, format_type)
+                print("☁️ Đang tải file local lên S3...")
+                url = cls._upload_to_s3(file_path, file_name, format_type)
                 tracker.mark_completed_with_url(url)
                 return
             except Exception as e:
                 print(f"⚠️ Lỗi S3 ({e}). Chuyển sang phương án Database...")
 
-        # 3. LƯU DATABASE
-        print("💾 Đang lưu trực tiếp vào Database...")
+        # 3. LƯU DATABASE (Đọc ngược file lên lại RAM và lưu vào cột dữ liệu)
+        print("💾 Đang đọc file local và lưu trực tiếp vào Database...")
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
         tracker.mark_completed_with_data(content, format_type)

@@ -70,7 +70,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
 
         working_keys = list(active_configs)
         current_key_idx = 0
-        flattened_data = []
+        total_generated_samples = 0
 
         tracker.job.status = "running"
         db.commit()
@@ -106,18 +106,35 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                     parsed_data = extract_json_from_text(raw_text)
 
                     if parsed_data and isinstance(parsed_data, list):
-                        flattened_data.extend(parsed_data)
+                        StorageManager.append_to_local_file(job_id, parsed_data, request.format)
                         tracker.add_progress(len(parsed_data))  # Báo cáo Dashboard
+                        generated_count = len(parsed_data)
+                        total_generated_samples += generated_count
                         seed_success = True
+                        keys_tried_for_this_seed = 0
                         await asyncio.sleep(2)  # Nghỉ để tránh Rate Limit
                     else:
                         raise Exception("AI trả về sai định dạng JSON.")
 
-
                 except AuthenticationError as e:
                     working_keys.pop(current_key_idx)
                 except RateLimitError as e:
-                    working_keys.pop(current_key_idx)
+                    error_msg = str(e).lower()
+                    # Phân biệt Quota Ngày (RPD) vs Quá tải Phút (RPM/TPM)
+                    if "quota" in error_msg or "exceeded" in error_msg and "daily" in error_msg:
+                        # Hết quota ngày -> Xóa key này khỏi danh sách làm việc
+                        working_keys.pop(current_key_idx)
+                        # KHÔNG tăng keys_tried_for_this_seed vì mảng đã bị rút ngắn
+                    else:
+                        # Bị Rate limit phút -> Không xóa key, chỉ chuyển sang key khác hoặc đi ngủ
+                        keys_tried_for_this_seed += 1
+                        if len(working_keys) == 1:
+                            # Nếu chỉ có 1 key mà bị rate limit, bắt buộc phải ngủ đông 60 giây
+                            await asyncio.sleep(60)
+                        else:
+                            # Đổi sang key tiếp theo trong mảng
+                            current_key_idx = (current_key_idx + 1) % len(working_keys)
+                            await asyncio.sleep(2)
                 except ContextWindowExceededError as e:
                     break
                 except Exception as e:
@@ -131,12 +148,10 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                 continue
 
         # Xong việc -> Lưu file
-        if flattened_data:
-            StorageManager.save_dataset(tracker, flattened_data, request.format)
-            if tracker.job.error_message:
+        if total_generated_samples > 0:
+            StorageManager.finalize_dataset(tracker, request.format)
+            if tracker.job.error_message and tracker.job.status != "completed":
                 tracker.job.status = "failed"  # Đánh dấu đỏ trên UI
-            else:
-                tracker.job.status = "completed"
         else:
             tracker.mark_failed("Quá trình chạy hoàn tất nhưng không sinh được dữ liệu hợp lệ nào.")
 

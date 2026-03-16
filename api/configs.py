@@ -69,12 +69,14 @@ def add_config(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    prefix = f"{req.provider.lower()}/"
+    normalized_model_name = req.model_name if req.model_name.startswith(prefix) else f"{prefix}{req.model_name}"
     """Thêm config mới cho user hiện tại."""
     config = models.ApiConfig(
         user_id=current_user.id,
         provider=req.provider,
         api_key=encrypt_api_key(req.api_key),  # Encrypt trước khi lưu
-        model_name=req.model_name,
+        model_name=normalized_model_name,
         is_active=True
     )
     db.add(config)
@@ -84,7 +86,7 @@ def add_config(
     return ConfigResponseWithKey(
         id=config.id,
         provider=config.provider,
-        model_name=config.model_name,
+        model_name=normalized_model_name,
         is_active=config.is_active,
         api_key_masked=mask_key(req.api_key)
     )
