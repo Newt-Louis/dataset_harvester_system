@@ -28,7 +28,7 @@ class Settings:
     # --- CẤU HÌNH LƯU TRỮ (STORAGE) ---
     # Google Drive
     GDRIVE_FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "")
-    GDRIVE_CREDENTIALS_PATH = os.getenv("GDRIVE_CREDENTIALS_PATH", "gdrive_credentials.json")
+    GDRIVE_CREDENTIALS_JSON = os.getenv("GDRIVE_CREDENTIALS_JSON", "if_use_this_must_have_credentials")
 
     # S3 (AWS, Cloudflare R2, Supabase...)
     S3_ENDPOINT = os.getenv("S3_ENDPOINT", "")

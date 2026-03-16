@@ -37,8 +37,8 @@ class StorageManager:
     def _upload_to_gdrive(content_string: str, file_name: str, format_type: str) -> str:
         """Bắn file lên Google Drive, trả về URL xem file"""
         scopes = ['https://www.googleapis.com/auth/drive.file']
-        creds = service_account.Credentials.from_service_account_file(
-            settings.GDRIVE_CREDENTIALS_PATH, scopes=scopes)
+        creds = service_account.Credentials.from_service_account_info(
+            settings.GDRIVE_CREDENTIALS_JSON, scopes=scopes)
 
         service = build('drive', 'v3', credentials=creds)
 
