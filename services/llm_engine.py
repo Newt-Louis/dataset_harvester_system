@@ -54,7 +54,7 @@ def save_to_file(all_data: list, format_type: str):
 async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: int):
     """Hàm chạy nền: Lấy Key từ DB, xoay vòng API, cập nhật tiến độ"""
 
-    # 1. Tự mở một phiên làm việc Database MỚI cho Background Task
+    # Tự mở một phiên làm việc Database MỚI cho Background Task
     db = SessionLocal()
     tracker = JobTracker(db, job_id)
 
@@ -83,7 +83,6 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
 
             seed_success = False
             keys_tried_for_this_seed = 0
-
             current_prompt = build_dynamic_prompt(request, current_seed)
 
             while not seed_success and keys_tried_for_this_seed < len(working_keys):
@@ -100,13 +99,14 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                             messages=[{"role": "user", "content": current_prompt}],
                             api_key=real_api_key,  # Bơm Key thật đã giải mã vào đây
                             temperature=0.7,
+                            timeout=60
                         )
 
                     raw_text = response.choices[0].message.content
                     parsed_data = extract_json_from_text(raw_text)
 
                     if parsed_data and isinstance(parsed_data, list):
-                        StorageManager.append_to_local_file(job_id, parsed_data, request.format)
+                        file_path = StorageManager.append_to_local_file(job_id, parsed_data, request.format)
                         tracker.add_progress(len(parsed_data))  # Báo cáo Dashboard
                         generated_count = len(parsed_data)
                         total_generated_samples += generated_count
@@ -121,8 +121,8 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                 except RateLimitError as e:
                     error_msg = str(e).lower()
                     # Phân biệt Quota Ngày (RPD) vs Quá tải Phút (RPM/TPM)
-                    if "quota" in error_msg or "exceeded" in error_msg and "daily" in error_msg:
-                        # Hết quota ngày -> Xóa key này khỏi danh sách làm việc
+                    if "limit: 0" in error_msg or "perday" in error_msg or "daily" in error_msg:
+                        # Hết quota ngày, hoặc model bị cấm -> Xóa key này khỏi danh sách làm việc
                         working_keys.pop(current_key_idx)
                         # KHÔNG tăng keys_tried_for_this_seed vì mảng đã bị rút ngắn
                     else:

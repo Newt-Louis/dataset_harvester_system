@@ -5,6 +5,8 @@ from typing import List
 from database.database import get_db
 from core.security import get_current_user, encrypt_api_key, decrypt_api_key
 from database import models
+from schemas.payloads import TestModelRequest
+from services.test_models import run_model_test
 
 router = APIRouter(prefix="/api/configs", tags=["configs"])
 
@@ -130,3 +132,28 @@ def delete_config(
     db.delete(config)
     db.commit()
     return {"detail": "Đã xóa"}
+
+@router.post("/{config_id}/test")
+async def test_model_connection(
+        config_id: int,
+        req: TestModelRequest,
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    config = db.query(models.ApiConfig).filter(
+        models.ApiConfig.id == config_id,
+        models.ApiConfig.user_id == current_user.id
+    ).first()
+
+    if not config:
+        raise HTTPException(status_code=404, detail="Không tìm thấy cấu hình API Key này.")
+
+    real_api_key = decrypt_api_key(config.api_key) # type: ignore[arg-type]
+
+    result = await run_model_test(
+        model_name=config.model_name, # type: ignore[arg-type]
+        api_key=real_api_key,
+        payload=req
+    )
+
+    return result

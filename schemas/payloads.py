@@ -24,3 +24,13 @@ class HarvesterResponse(BaseModel):
     status: str
     message: str
     job_id: Optional[int] = None
+
+class TestSeedItem(BaseModel):
+    context: str
+    rule: str
+
+class TestModelRequest(BaseModel):
+    role_prompt: str
+    constraints_prompt: str
+    schema_definition: str
+    seed: TestSeedItem

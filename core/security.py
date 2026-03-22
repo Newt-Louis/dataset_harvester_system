@@ -1,5 +1,4 @@
 from typing import Any
-
 import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
@@ -62,7 +61,7 @@ def get_current_user(
     db: Session = Depends(get_db)
 ) -> models.User:
     user_id = decode_token(credentials.credentials)
-    user: Any | None = db.query(models.User).filter(models.User.id == user_id).first()
+    user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=401, detail="Không tìm thấy user")
     return user
