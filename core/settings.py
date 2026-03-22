@@ -36,4 +36,6 @@ class Settings:
     S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
     S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "")
     S3_PUBLIC_URL = os.getenv("S3_PUBLIC_URL", "")  # URL gốc để tạo link tải
+
+    ADMIN_EMAILS: str = os.getenv("ADMIN_EMAILS", "admin@localhost.com")
 settings = Settings()
