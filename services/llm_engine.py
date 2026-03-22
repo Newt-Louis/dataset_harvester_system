@@ -1,8 +1,9 @@
-import asyncio, json, re, os, csv
+import asyncio, json, re, os, csv, traceback
 from datetime import datetime
 from litellm import acompletion
 from litellm.exceptions import AuthenticationError, RateLimitError, ContextWindowExceededError
 
+from api.logs import write_system_log
 from core.settings import settings
 from core.prompts import build_dynamic_prompt
 from core.security import decrypt_api_key
@@ -117,16 +118,22 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                         raise Exception("AI trả về sai định dạng JSON.")
 
                 except AuthenticationError as e:
+                    write_system_log(db, "ERROR", f"Engine - Model: {config.model_name}",
+                                     f"Lỗi xác thực/Key hỏng: {str(e)}")
                     working_keys.pop(current_key_idx)
                 except RateLimitError as e:
                     error_msg = str(e).lower()
                     # Phân biệt Quota Ngày (RPD) vs Quá tải Phút (RPM/TPM)
                     if "limit: 0" in error_msg or "perday" in error_msg or "daily" in error_msg:
                         # Hết quota ngày, hoặc model bị cấm -> Xóa key này khỏi danh sách làm việc
+                        write_system_log(db, "WARNING", f"Engine - Model: {config.model_name}",
+                                         f"Bị chặn Limit 0 hoặc hết Quota ngày: {str(e)}")
                         working_keys.pop(current_key_idx)
                         # KHÔNG tăng keys_tried_for_this_seed vì mảng đã bị rút ngắn
                     else:
                         # Bị Rate limit phút -> Không xóa key, chỉ chuyển sang key khác hoặc đi ngủ
+                        write_system_log(db, "INFO", f"Engine - Model: {config.model_name}",
+                                         "Chạm trần RPM/TPM, đang sleep chờ phục hồi.")
                         keys_tried_for_this_seed += 1
                         if len(working_keys) == 1:
                             # Nếu chỉ có 1 key mà bị rate limit, bắt buộc phải ngủ đông 60 giây
@@ -135,11 +142,16 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                             # Đổi sang key tiếp theo trong mảng
                             current_key_idx = (current_key_idx + 1) % len(working_keys)
                             await asyncio.sleep(2)
+                    write_system_log(e.message)
                 except ContextWindowExceededError as e:
+                    write_system_log(db, "WARNING", f"Engine - Model: {config.model_name}",
+                                     f"Prompt vượt quá sức chứa: {str(e)}")
                     break
                 except Exception as e:
                     keys_tried_for_this_seed += 1
                     current_key_idx = (current_key_idx + 1) % len(working_keys)
+                    write_system_log(db, "ERROR", f"Engine - Model: {config.model_name}",
+                                     f"Lỗi kết nối/Timeout: {str(e)}")
                     await asyncio.sleep(1)
                 if working_keys:
                     current_key_idx = current_key_idx % len(working_keys)
@@ -156,6 +168,8 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
             tracker.mark_failed("Quá trình chạy hoàn tất nhưng không sinh được dữ liệu hợp lệ nào.")
 
     except Exception as e:
+        error_detail = traceback.format_exc()
+        write_system_log(db, "CRITICAL", f"Engine - Job {job_id}", f"Job bị crash hoàn toàn:\n{error_detail}")
         tracker.mark_failed(str(e))
     finally:
         db.close()  # RẤT QUAN TRỌNG: Dọn dẹp kết nối Database

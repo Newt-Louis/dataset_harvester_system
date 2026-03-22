@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/logs", tags=["Logs"])
 
 
 # ==========================================
-# 1. HÀM KIỂM TRA QUYỀN ADMIN (Dependency)
+# HÀM KIỂM TRA QUYỀN ADMIN (Dependency)
 # ==========================================
 def get_admin_user(current_user: models.User = Depends(get_current_user)):
     # Tách chuỗi email từ .env thành list
@@ -24,7 +24,7 @@ def get_admin_user(current_user: models.User = Depends(get_current_user)):
 
 
 # ==========================================
-# 2. HÀM TIỆN ÍCH ĐỂ GHI LOG (Dùng nội bộ)
+# HÀM TIỆN ÍCH ĐỂ GHI LOG (Dùng nội bộ)
 # ==========================================
 def write_system_log(db: Session, level: str, source: str, message: str):
     """
@@ -45,7 +45,7 @@ def write_system_log(db: Session, level: str, source: str, message: str):
 
 
 # ==========================================
-# 3. ROUTE CHO FRONTEND LẤY LOGS
+# ROUTE CHO FRONTEND LẤY LOGS
 # ==========================================
 @router.get("")
 def get_system_logs(
