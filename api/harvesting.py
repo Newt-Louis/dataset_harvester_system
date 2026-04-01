@@ -91,3 +91,45 @@ async def generate_dataset(request_data: HarvesterRequest, background_tasks: Bac
         message=f"Hệ thống đã đưa vào hàng đợi! Dự kiến sinh tối đa {total_samples_expected} mẫu. Hãy sang Trạm Điều Khiển (Dashboard) để xem tiến độ.",
         job_id=job_to_run.id
     )
+
+@router.post("/stop-harves")
+async def stop_harvesting(db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_user)):
+    # Tìm Job đang chạy hoặc đang chờ của User này
+    active_job = db.query(models.HarvestJob).filter(
+        models.HarvestJob.user_id == current_user.id,
+        models.HarvestJob.status.in_(["pending", "running"])
+    ).first()
+
+    if not active_job:
+        return HarvesterResponse(status="info",message="Không có tác vụ nào đang chạy để dừng.",job_id=None)
+
+    # Đánh dấu là đã dừng. Engine chạy nền sẽ check trạng thái này và tự ngắt
+    active_job.status = "stopped"
+    db.commit()
+
+    return HarvesterResponse(status="success",message="Dừng chương trình thành công. Dữ liệu đã thu thập được đã được lưu lại.",job_id=None)
+
+    from fastapi.responses import FileResponse
+    import os
+
+    @router.get("/jobs/{job_id}/download")
+    async def download_job_result(job_id: int, format: str = "jsonl", db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_user)):
+    # 1. Kiểm tra Job có thuộc về User này không
+    job = db.query(models.HarvestJob).filter(models.HarvestJob.id == job_id, models.HarvestJob.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu thu hoạch này.")
+
+    # 2. Đường dẫn file cục bộ
+    file_path = f"downloads/dataset_job_{job_id}.{format}"
+
+    if not os.path.exists(file_path):
+        # Nếu không có file cục bộ, có thể do đã upload lên cloud và xóa local hoặc chưa sinh
+        if job.output_file_url and job.output_file_url.startswith("http"):
+             return {"message": "Tải từ Cloud", "url": job.output_file_url}
+        raise HTTPException(status_code=404, detail="File kết quả chưa được tạo hoặc đã bị xóa.")
+
+    return FileResponse(
+        path=file_path,
+        filename=f"dataset_harvest_{job_id}.{format}",
+        media_type='application/octet-stream'
+    )

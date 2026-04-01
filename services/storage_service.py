@@ -19,7 +19,7 @@ except ImportError:
 
 
 class StorageManager:
-    LOCAL_DATA_DIR = "local_datasets"
+    LOCAL_DATA_DIR = "downloads"
 
     @classmethod
     def append_to_local_file(cls, job_id: int, data_chunk: list, format_type: str) -> str:
@@ -64,8 +64,18 @@ class StorageManager:
     def _upload_to_gdrive(file_path: str, file_name: str, format_type: str) -> str:
         """Bắn file lên Google Drive, trả về URL xem file"""
         scopes = ['https://www.googleapis.com/auth/drive.file']
+        
+        # Nếu credentials là string (từ .env), phải parse sang dict
+        creds_info = settings.GDRIVE_CREDENTIALS_JSON
+        if isinstance(creds_info, str):
+            try:
+                creds_info = json.loads(creds_info)
+            except Exception as e:
+                print(f"❌ Lỗi: Cấu hình GDRIVE_CREDENTIALS_JSON trong .env không phải là JSON chuẩn. {e}")
+                raise e
+
         creds = service_account.Credentials.from_service_account_info(
-            settings.GDRIVE_CREDENTIALS_JSON, scopes=scopes)
+            creds_info, scopes=scopes)
 
         service = build('drive', 'v3', credentials=creds)
 
