@@ -61,7 +61,7 @@ async def run_model_test(model_name: str, api_key: str, payload: TestModelReques
 
     except RateLimitError as e:
         raise HTTPException(status_code=429,
-                            detail=f"Lỗi Giới hạn (Hết quota, thiếu Credit hoặc gọi quá nhanh):\n{str(e)}")
+                            detail=f"Lỗi giới hạn (Hết quota, thiếu Credit hoặc gọi quá nhanh):\n{str(e)}")
 
     except ContextWindowExceededError as e:
         raise HTTPException(status_code=400, detail=f"Lỗi Context Window (Prompt quá dài):\n{str(e)}")
