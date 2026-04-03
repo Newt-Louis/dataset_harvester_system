@@ -63,6 +63,7 @@ def extract_json_from_text(text: str):
         print(f"DEBUG: Lỗi extract JSON: {e}")
         return None
 
+
 async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: int):
     """Hàm chạy nền: Lấy Key từ DB, xoay vòng API, cập nhật tiến độ"""
 
@@ -70,6 +71,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
     tracker = JobTracker(db, job_id)
 
     try:
+        # Đảm bảo thư mục lưu file tồn tại (Dùng folder chung 'downloads')
         os.makedirs("downloads", exist_ok=True)
 
         active_configs = db.query(ApiConfig).filter(
@@ -102,22 +104,23 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                 if tracker.job.status == "stopped":
                     break
 
-                # Đảm bảo index không vượt quá mảng (phòng trường hợp mảng bị rút ngắn do lỗi)
+                # Đảm bảo index không vượt quá mảng
                 current_key_idx = current_key_idx % len(working_keys)
                 config = working_keys[current_key_idx]
+                
                 real_api_key = decrypt_api_key(config.api_key)
                 tracker.update_model(config.model_name)
 
                 try:
                     async with semaphore:
-                        # Tăng max_tokens để tránh bị cắt cụt JSON khi sinh nhiều mẫu
+                        # Tăng timeout và max_tokens để xử lý các phản hồi dài (SQL dataset)
                         response = await acompletion(
                             model=config.model_name,
                             messages=[{"role": "user", "content": current_prompt}],
                             api_key=real_api_key,
                             temperature=0.7,
                             timeout=120,
-                            max_tokens=8192 
+                            max_tokens=8192
                         )
 
                     raw_text = response.choices[0].message.content
@@ -137,9 +140,17 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                     else:
                         raise Exception("AI trả về sai định dạng JSON.")
 
+                except (AuthenticationError, RateLimitError) as e:
+                    error_msg = str(e).lower()
+                    if "limit" in error_msg or "auth" in error_msg or "key" in error_msg:
+                         write_system_log(db, "WARNING", f"Engine - Model: {config.model_name}", f"Hủy Key lỗi: {str(e)}")
+                         working_keys.pop(current_key_idx)
+                    else:
+                         keys_tried_for_this_seed += 1
+                         current_key_idx = (current_key_idx + 1) % len(working_keys)
+                         await asyncio.sleep(5)
                 except Exception as e:
-                    # Nếu lỗi, log lại và chuyển key ngay
-                    write_system_log(db, "WARNING", f"Engine - Model: {config.model_name}", f"Lỗi: {str(e)}")
+                    write_system_log(db, "WARNING", f"Engine - Model: {config.model_name}", f"Lỗi kết nối/Khác: {str(e)}")
                     keys_tried_for_this_seed += 1
                     current_key_idx = (current_key_idx + 1) % len(working_keys)
                     await asyncio.sleep(2)
@@ -154,59 +165,9 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
             if tracker.job.status != "stopped":
                 tracker.mark_failed("Quá trình chạy hoàn tất nhưng không sinh được dữ liệu hợp lệ nào.")
 
-                except AuthenticationError as e:
-                    write_system_log(db, "ERROR", f"Engine - Model: {config.model_name}",
-                                     f"Lỗi xác thực/Key hỏng: {str(e)}")
-                    working_keys.pop(current_key_idx)
-                except RateLimitError as e:
-                    error_msg = str(e).lower()
-                    # Phân biệt Quota Ngày (RPD) vs Quá tải Phút (RPM/TPM)
-                    if "limit: 0" in error_msg or "perday" in error_msg or "daily" in error_msg:
-                        # Hết quota ngày, hoặc model bị cấm -> Xóa key này khỏi danh sách làm việc
-                        write_system_log(db, "WARNING", f"Engine - Model: {config.model_name}",
-                                         f"Bị chặn Limit 0 hoặc hết Quota ngày: {str(e)}")
-                        working_keys.pop(current_key_idx)
-                        # KHÔNG tăng keys_tried_for_this_seed vì mảng đã bị rút ngắn
-                    else:
-                        # Bị Rate limit phút -> Không xóa key, chỉ chuyển sang key khác hoặc đi ngủ
-                        write_system_log(db, "INFO", f"Engine - Model: {config.model_name}",
-                                         "Chạm trần RPM/TPM, đang sleep chờ phục hồi.")
-                        keys_tried_for_this_seed += 1
-                        if len(working_keys) == 1:
-                            # Nếu chỉ có 1 key mà bị rate limit, bắt buộc phải ngủ đông 60 giây
-                            await asyncio.sleep(60)
-                        else:
-                            # Đổi sang key tiếp theo trong mảng
-                            current_key_idx = (current_key_idx + 1) % len(working_keys)
-                            await asyncio.sleep(2)
-                    write_system_log(e.message)
-                except ContextWindowExceededError as e:
-                    write_system_log(db, "WARNING", f"Engine - Model: {config.model_name}",
-                                     f"Prompt vượt quá sức chứa: {str(e)}")
-                    break
-                except Exception as e:
-                    keys_tried_for_this_seed += 1
-                    current_key_idx = (current_key_idx + 1) % len(working_keys)
-                    write_system_log(db, "ERROR", f"Engine - Model: {config.model_name}",
-                                     f"Lỗi kết nối/Timeout: {str(e)}")
-                    await asyncio.sleep(1)
-                if working_keys:
-                    current_key_idx = current_key_idx % len(working_keys)
-
-            if not seed_success and working_keys:
-                continue
-
-        # Xong việc -> Lưu file
-        if total_generated_samples > 0:
-            StorageManager.finalize_dataset(tracker, request.format)
-            if tracker.job.error_message and tracker.job.status != "completed":
-                tracker.job.status = "failed"  # Đánh dấu đỏ trên UI
-        else:
-            tracker.mark_failed("Quá trình chạy hoàn tất nhưng không sinh được dữ liệu hợp lệ nào.")
-
     except Exception as e:
         error_detail = traceback.format_exc()
         write_system_log(db, "CRITICAL", f"Engine - Job {job_id}", f"Job bị crash hoàn toàn:\n{error_detail}")
         tracker.mark_failed(str(e))
     finally:
-        db.close()  # RẤT QUAN TRỌNG: Dọn dẹp kết nối Database
+        db.close()

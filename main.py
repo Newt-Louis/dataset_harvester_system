@@ -12,6 +12,7 @@ from database.database import SessionLocal
 from api.logs import write_system_log
 from database.database import engine, Base
 from database import models
+from api.harvesting import router as harvesting_router
 app = FastAPI(
     title="AI Dataset Harvester API",
     description="Core engine cho việc gọi đa model AI (Gemini, Groq, OpenRouter...)",
@@ -69,7 +70,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 app.mount("/downloads", StaticFiles(directory="downloads"), name="downloads")
-
+app.include_router(harvesting_router)
 def include_routers_automatically():
     api_dir = Path(__file__).parent / "api"
 

@@ -1,5 +1,6 @@
-import json
+import json,os
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from schemas.payloads import HarvesterRequest, HarvesterResponse
 from services.llm_engine import run_harvester_engine
@@ -109,11 +110,8 @@ async def stop_harvesting(db: Session = Depends(get_db), current_user: models.Us
 
     return HarvesterResponse(status="success",message="Dừng chương trình thành công. Dữ liệu đã thu thập được đã được lưu lại.",job_id=None)
 
-    from fastapi.responses import FileResponse
-    import os
-
-    @router.get("/jobs/{job_id}/download")
-    async def download_job_result(job_id: int, format: str = "jsonl", db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_user)):
+@router.get("/jobs/{job_id}/download")
+async def download_job_result(job_id: int, format: str = "jsonl", db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_user)):
     # 1. Kiểm tra Job có thuộc về User này không
     job = db.query(models.HarvestJob).filter(models.HarvestJob.id == job_id, models.HarvestJob.user_id == current_user.id).first()
     if not job:
