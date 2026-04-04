@@ -96,8 +96,10 @@ class HarvestJob(Base):
     output_format = Column(String, nullable=False)
 
     # Thông tin Tiến trình (Cập nhật liên tục bởi llm_engine)
-    status = Column(String, default="pending")  # pending, running, completed, failed
+    status = Column(String, default="pending")  # pending, running, completed, stopped, failed
     current_seed_index = Column(Integer, default=0)
+    current_seed_context = Column(Text, nullable=True)
+    current_seed_rule = Column(Text, nullable=True)
     current_provider = Column(String, default="")
     current_model = Column(String, default="")
     samples_generated = Column(Integer, default=0)

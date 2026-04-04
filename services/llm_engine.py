@@ -92,8 +92,12 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
         for seed_idx, current_seed in enumerate(request.seeds):
             db.refresh(tracker.job)
             if tracker.job.status == "stopped":
-                write_system_log(db, "INFO", f"Engine - Job {job_id}", "Người dùng đã gửi lệnh dừng khẩn cấp.")
+                tracker.add_log("Dừng chương trình theo yêu cầu.")
                 break
+
+            # Cập nhật thông tin hạt giống hiện tại lên UI
+            tracker.update_seed_info(seed_idx + 1, current_seed.context, current_seed.rule)
+            tracker.add_log(f"Đang xử lý hạt giống {seed_idx + 1}/{len(request.seeds)}")
 
             seed_success = False
             keys_tried_for_this_seed = 0
@@ -109,9 +113,11 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                 config = working_keys[current_key_idx]
                 
                 real_api_key = decrypt_api_key(config.api_key)
+                tracker.update_provider(config.provider) # Cập nhật Provider (Gemini, Groq...)
                 tracker.update_model(config.model_name)
 
                 try:
+                    tracker.add_log(f"Đang gọi {config.provider} ({config.model_name})...")
                     async with semaphore:
                         # Tăng timeout và max_tokens để xử lý các phản hồi dài (SQL dataset)
                         response = await acompletion(

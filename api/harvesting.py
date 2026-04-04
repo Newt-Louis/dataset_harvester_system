@@ -63,6 +63,7 @@ async def generate_dataset(request_data: HarvesterRequest, background_tasks: Bac
 
     if existing_job:
         # Tái sử dụng (Update) Job cũ để không rác UI
+        existing_job.prompt = prompt_json
         existing_job.total_seeds = len(request_data.seeds)
         existing_job.target_samples_per_seed = request_data.samples
         existing_job.output_format = request_data.format
@@ -77,9 +78,10 @@ async def generate_dataset(request_data: HarvesterRequest, background_tasks: Bac
             total_seeds=len(request_data.seeds),
             target_samples_per_seed=request_data.samples,
             output_format=request_data.format,
-            prompt="Dynamic Prompt Architecture",  # Lưu tóm tắt
+            prompt=prompt_json,
             status="pending"
         )
+
         db.add(new_job)
         db.commit()
         db.refresh(new_job)
