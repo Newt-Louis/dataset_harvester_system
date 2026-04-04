@@ -19,6 +19,7 @@ class HarvesterRequest(BaseModel):
     seeds: List[SeedItem] = Field(..., description="Danh sách các cặp Bối cảnh & Quy tắc")
     format: str = Field(..., description="Định dạng đầu ra: jsonl hoặc csv")
     samples: int = Field(..., description="Số lượng mẫu trên mỗi hạt giống")
+    delay: int = Field(default=2, description="Thời gian nghỉ giữa các request (giây)")
 
 class HarvesterResponse(BaseModel):
     status: str

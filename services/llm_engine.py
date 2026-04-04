@@ -2,7 +2,7 @@ import asyncio, json, re, os, csv, traceback
 from datetime import datetime
 from litellm import acompletion
 from litellm.exceptions import AuthenticationError, RateLimitError, ContextWindowExceededError
-
+import database.models as models
 from api.logs import write_system_log
 from core.settings import settings
 from core.prompts import build_dynamic_prompt
@@ -95,6 +95,13 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                 tracker.add_log("Dừng chương trình theo yêu cầu.")
                 break
 
+            # --- KIỂM TRA TẤT CẢ MODEL CẠN KIỆT (Task 2) ---
+            if len(working_keys) == 0:
+                msg = f"Tất cả API Key ({len(active_configs)}) đều đạt giới hạn hoặc lỗi. Dừng tại hạt giống #{seed_idx + 1}."
+                tracker.mark_failed(msg)
+                write_system_log(db, "WARNING", f"Engine - Job {job_id}", msg)
+                break
+
             # Cập nhật thông tin hạt giống hiện tại lên UI
             tracker.update_seed_info(seed_idx + 1, current_seed.context, current_seed.rule)
             tracker.add_log(f"Đang xử lý hạt giống {seed_idx + 1}/{len(request.seeds)}")
@@ -113,13 +120,12 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                 config = working_keys[current_key_idx]
                 
                 real_api_key = decrypt_api_key(config.api_key)
-                tracker.update_provider(config.provider) # Cập nhật Provider (Gemini, Groq...)
+                tracker.update_provider(config.provider)
                 tracker.update_model(config.model_name)
 
                 try:
                     tracker.add_log(f"Đang gọi {config.provider} ({config.model_name})...")
                     async with semaphore:
-                        # Tăng timeout và max_tokens để xử lý các phản hồi dài (SQL dataset)
                         response = await acompletion(
                             model=config.model_name,
                             messages=[{"role": "user", "content": current_prompt}],
@@ -140,28 +146,52 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                         seed_success = True
                         keys_tried_for_this_seed = 0
                         
-                        # XOAY VÒNG KEY: Thành công cũng đổi key để chia tải RPM
+                        # XOAY VÒNG KEY
                         current_key_idx = (current_key_idx + 1) % len(working_keys)
-                        await asyncio.sleep(1) 
+                        
+                        # SỬ DỤNG DELAY TÙY CHỈNH (Task 3)
+                        await asyncio.sleep(request.delay) 
                     else:
                         raise Exception("AI trả về sai định dạng JSON.")
 
                 except (AuthenticationError, RateLimitError) as e:
                     error_msg = str(e).lower()
                     if "limit" in error_msg or "auth" in error_msg or "key" in error_msg:
-                         write_system_log(db, "WARNING", f"Engine - Model: {config.model_name}", f"Hủy Key lỗi: {str(e)}")
+                         tracker.add_log(f"Model {config.model_name} bị loại bỏ (Hết hạn/Lỗi Auth).")
                          working_keys.pop(current_key_idx)
                     else:
                          keys_tried_for_this_seed += 1
                          current_key_idx = (current_key_idx + 1) % len(working_keys)
                          await asyncio.sleep(5)
                 except Exception as e:
-                    write_system_log(db, "WARNING", f"Engine - Model: {config.model_name}", f"Lỗi kết nối/Khác: {str(e)}")
+                    tracker.add_log(f"Lỗi kết nối model {config.model_name}. Thử model khác...")
                     keys_tried_for_this_seed += 1
                     current_key_idx = (current_key_idx + 1) % len(working_keys)
                     await asyncio.sleep(2)
 
-        # Xong việc hoặc bị dừng (Stop) -> Chốt sổ để lưu file lên Cloud
+        # --- CẬP NHẬT STATE & CẮT SEED (Task 1) ---
+        state = db.query(models.HarvesterState).filter(models.HarvesterState.user_id == user_id).first()
+        if state and state.seeds:
+            try:
+                original_seeds = json.loads(state.seeds)
+                
+                if tracker.job.status == "completed":
+                    # Xong hết sạch -> Clear mảng
+                    state.seeds = "[]"
+                else:
+                    # Bị dừng/lỗi -> Cắt bỏ những hạt giống ĐÃ xử lý xong hoàn toàn
+                    # tracker.job.current_seed_index là 1-based index
+                    # Ví dụ đang chạy hạt giống thứ 3 (index 2) mà bị dừng, 
+                    # ta muốn giữ từ index 2 trở đi.
+                    new_seeds = original_seeds[tracker.job.current_seed_index - 1:]
+                    state.seeds = json.dumps(new_seeds, ensure_ascii=False)
+                
+                db.commit()
+                tracker.add_log("Đã cập nhật danh sách hạt giống còn lại.")
+            except Exception as se:
+                write_system_log(db, "ERROR", "Engine - Seed Cutting", f"Không thể cắt tỉa hạt giống: {str(se)}")
+
+        # Xong việc hoặc bị dừng (Stop) -> Chốt sổ
         if total_generated_samples > 0:
             StorageManager.finalize_dataset(tracker, request.format)
             if tracker.job.status not in ["completed", "stopped"]:

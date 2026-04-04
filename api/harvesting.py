@@ -21,7 +21,8 @@ async def get_harvester_state(db: Session = Depends(get_db), current_user: model
         "seeds": state.seeds,
         "output_format": state.output_format,
         "output_schema": state.output_schema,
-        "samples": state.samples
+        "samples": state.samples,
+        "delay": state.delay
     }
 
 @router.post("/generate", response_model=HarvesterResponse)
@@ -54,6 +55,7 @@ async def generate_dataset(request_data: HarvesterRequest, background_tasks: Bac
     state.output_format = request_data.format
     state.output_schema = request_data.schema_definition
     state.samples = request_data.samples
+    state.delay = request_data.delay
     db.commit()
 
     existing_job = db.query(models.HarvestJob).filter(

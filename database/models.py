@@ -59,6 +59,7 @@ class HarvesterState(Base):
     output_format = Column(String, default="jsonl")
     output_schema = Column(Text, default="")
     samples = Column(Integer, default=10)
+    delay = Column(Integer, default=2)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
 
