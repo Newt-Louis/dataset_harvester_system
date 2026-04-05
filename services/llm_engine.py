@@ -71,8 +71,10 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
     tracker = JobTracker(db, job_id)
 
     try:
-        # Đảm bảo thư mục lưu file tồn tại (Dùng folder chung 'downloads')
-        os.makedirs("downloads", exist_ok=True)
+        # Lấy username để tạo thư mục riêng (Tránh Render xóa nhầm)
+        user = db.query(models.User).get(user_id)
+        username = user.username if user else f"user_{user_id}"
+        StorageManager.get_user_dir(username)
 
         active_configs = db.query(ApiConfig).filter(
             ApiConfig.user_id == user_id,
@@ -139,7 +141,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                     parsed_data = extract_json_from_text(raw_text)
 
                     if parsed_data and isinstance(parsed_data, list):
-                        StorageManager.append_to_local_file(job_id, parsed_data, request.format)
+                        StorageManager.append_to_local_file(job_id, parsed_data, request.format, username)
                         
                         tracker.add_progress(len(parsed_data))
                         total_generated_samples += len(parsed_data)

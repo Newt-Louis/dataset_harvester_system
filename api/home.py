@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from database.database import get_db
 from database import models
 from core import security
+from services.storage_service import StorageManager
 
 router = APIRouter(tags=["Home"])
 
@@ -20,10 +21,16 @@ async def root(db: Session = Depends(get_db), current_user: models.User = Depend
 
     yesterday = datetime.now(timezone.utc) - timedelta(days=1)
 
-    db.query(models.HarvestJob).filter(
+    # XÓA JOB CŨ > 24H VÀ FILE VẬT LÝ TƯƠNG ỨNG
+    old_jobs = db.query(models.HarvestJob).filter(
         models.HarvestJob.user_id == current_user.id,
         models.HarvestJob.updated_at < yesterday
-    ).delete()
+    ).all()
+
+    username = current_user.username or f"user_{current_user.id}"
+    for oj in old_jobs:
+        StorageManager.delete_job_files(username, oj.id)
+        db.delete(oj)
 
     db.commit()
 
@@ -40,6 +47,12 @@ async def root(db: Session = Depends(get_db), current_user: models.User = Depend
 @router.delete("/api/dashboard/cleanup")
 def force_cleanup_jobs(db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_user)):
     """Xóa SẠCH toàn bộ lịch sử trạng thái của user này ngay lập tức"""
-    db.query(models.HarvestJob).filter(models.HarvestJob.user_id == current_user.id).delete()
+    username = current_user.username or f"user_{current_user.id}"
+
+    old_jobs = db.query(models.HarvestJob).filter(models.HarvestJob.user_id == current_user.id).all()
+    for oj in old_jobs:
+        StorageManager.delete_job_files(username, oj.id)
+        db.delete(oj)
+
     db.commit()
     return {"status": "success", "message": "Đã xóa sạch lịch sử trên Dashboard"}

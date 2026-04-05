@@ -7,6 +7,7 @@ from services.llm_engine import run_harvester_engine
 from database.database import get_db
 from database import models
 from core import security
+from services.storage_service import StorageManager
 
 router = APIRouter(prefix="/api/harvesting", tags=["Harvesting"])
 
@@ -59,7 +60,10 @@ async def generate_dataset(request_data: HarvesterRequest, background_tasks: Bac
     db.commit()
 
     # XÓA TẤT CẢ JOB CŨ CỦA USER NÀY (Đảm bảo cơ chế 1 User - 1 Job duy nhất)
-    db.query(models.HarvestJob).filter(models.HarvestJob.user_id == current_user.id).delete()
+    old_jobs = db.query(models.HarvestJob).filter(models.HarvestJob.user_id == current_user.id).all()
+    for oj in old_jobs:
+        StorageManager.delete_job_files(current_user.username or f"user_{current_user.id}", oj.id)
+        db.delete(oj)
     db.commit()
 
     # TẠO JOB MỚI HOÀN TOÀN
@@ -107,8 +111,9 @@ async def download_job_result(job_id: int, format: str = "jsonl", db: Session = 
     if not job:
         raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu thu hoạch này.")
 
-    # 2. Đường dẫn file cục bộ
-    file_path = f"downloads/dataset_job_{job_id}.{format}"
+    # 2. Đường dẫn file cục bộ theo username
+    username = current_user.username or f"user_{current_user.id}"
+    file_path = f"downloads/{username}/dataset_job_{job_id}.{format}"
 
     if not os.path.exists(file_path):
         # Nếu không có file cục bộ, có thể do đã upload lên cloud và xóa local hoặc chưa sinh
