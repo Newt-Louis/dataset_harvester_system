@@ -109,7 +109,7 @@ class HarvestJob(Base):
     log_messages = Column(Text, default="[]")
 
     # Kết quả
-    output_file_url = Column(String, nullable=True)  # Link tải file hoặc link Drive
+    output_file_url = Column(String, nullable=True)  # Link tải file hoặc link S3
     error_message = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.now(timezone.utc))

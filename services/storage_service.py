@@ -2,15 +2,6 @@ import json, csv, io, os
 from datetime import datetime
 from core.settings import settings
 
-# Import tùy chọn (Không bắt ép user phải cài nếu họ không xài mây)
-try:
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload
-    HAS_GDRIVE = True
-except ImportError:
-    HAS_GDRIVE = False
-
 try:
     import boto3
     HAS_S3 = True
@@ -61,34 +52,6 @@ class StorageManager:
         return ""
 
     @staticmethod
-    def _upload_to_gdrive(file_path: str, file_name: str, format_type: str) -> str:
-        """Bắn file lên Google Drive, trả về URL xem file"""
-        scopes = ['https://www.googleapis.com/auth/drive.file']
-        
-        # Nếu credentials là string (từ .env), phải parse sang dict
-        creds_info = settings.GDRIVE_CREDENTIALS_JSON
-        if isinstance(creds_info, str):
-            try:
-                creds_info = json.loads(creds_info)
-            except Exception as e:
-                print(f"❌ Lỗi: Cấu hình GDRIVE_CREDENTIALS_JSON trong .env không phải là JSON chuẩn. {e}")
-                raise e
-
-        creds = service_account.Credentials.from_service_account_info(
-            creds_info, scopes=scopes)
-
-        service = build('drive', 'v3', credentials=creds)
-
-        # Biến chuỗi text thành đối tượng File-like trong RAM
-        media = MediaFileUpload(file_path,
-                                  mimetype='text/csv' if format_type == 'csv' else 'application/jsonl',resumable=True)
-
-        file_metadata = {'name': file_name, 'parents': [settings.GDRIVE_FOLDER_ID]}
-
-        uploaded_file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-        return uploaded_file.get('webViewLink')  # Trả về link Drive để click vào xem luôn
-
-    @staticmethod
     def _upload_to_s3(file_path: str, file_name: str, format_type: str) -> str:
         """Bắn file lên S3, trả về URL tải xuống"""
         s3_client = boto3.client('s3',
@@ -108,7 +71,7 @@ class StorageManager:
 
     @classmethod
     def finalize_dataset(cls, tracker, format_type: str):
-        """Hàm chốt sổ: Đẩy file từ Server lên Mây khi Job kết thúc hoặc bị hủy"""
+        """Hàm chốt sổ: Đẩy file từ Server lên Cloud (nếu có) hoặc lưu vào DB"""
         file_path = os.path.join(cls.LOCAL_DATA_DIR, f"dataset_job_{tracker.job_id}.{format_type}")
 
         # Kiểm tra xem file có tồn tại và có dữ liệu không
@@ -118,17 +81,7 @@ class StorageManager:
 
         file_name = f"dataset_job_{tracker.job_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format_type}"
 
-        # 1. THỬ GOOGLE DRIVE
-        if HAS_GDRIVE and settings.GDRIVE_FOLDER_ID and settings.GDRIVE_CREDENTIALS_JSON:
-            try:
-                print("☁️ Đang tải file local lên Google Drive...")
-                url = cls._upload_to_gdrive(file_path, file_name, format_type)
-                tracker.mark_completed_with_url(url)
-                return
-            except Exception as e:
-                print(f"⚠️ Lỗi Google Drive ({e}). Chuyển sang phương án dự phòng...")
-
-        # 2. THỬ S3
+        # 1. THỬ S3
         if HAS_S3 and settings.S3_BUCKET_NAME and settings.S3_ACCESS_KEY:
             try:
                 print("☁️ Đang tải file local lên S3...")
@@ -138,7 +91,7 @@ class StorageManager:
             except Exception as e:
                 print(f"⚠️ Lỗi S3 ({e}). Chuyển sang phương án Database...")
 
-        # 3. LƯU DATABASE (Đọc ngược file lên lại RAM và lưu vào cột dữ liệu)
+        # 2. LƯU DATABASE (Đọc ngược file lên lại RAM và lưu vào cột dữ liệu)
         print("💾 Đang đọc file local và lưu trực tiếp vào Database...")
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()

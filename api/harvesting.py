@@ -58,43 +58,29 @@ async def generate_dataset(request_data: HarvesterRequest, background_tasks: Bac
     state.delay = request_data.delay
     db.commit()
 
-    existing_job = db.query(models.HarvestJob).filter(
-        models.HarvestJob.user_id == current_user.id,
-        models.HarvestJob.status.in_(["pending", "running", "failed"])
-    ).first()
+    # XÓA TẤT CẢ JOB CŨ CỦA USER NÀY (Đảm bảo cơ chế 1 User - 1 Job duy nhất)
+    db.query(models.HarvestJob).filter(models.HarvestJob.user_id == current_user.id).delete()
+    db.commit()
 
-    if existing_job:
-        # Tái sử dụng (Update) Job cũ để không rác UI
-        existing_job.prompt = prompt_json
-        existing_job.total_seeds = len(request_data.seeds)
-        existing_job.target_samples_per_seed = request_data.samples
-        existing_job.output_format = request_data.format
-        existing_job.status = "pending"
-        existing_job.error_message = None  # Xóa lỗi cũ nếu có
-        db.commit()
-        db.refresh(existing_job)
-        job_to_run = existing_job
-    else:
-        new_job = models.HarvestJob(
-            user_id=current_user.id,
-            total_seeds=len(request_data.seeds),
-            target_samples_per_seed=request_data.samples,
-            output_format=request_data.format,
-            prompt=prompt_json,
-            status="pending"
-        )
+    # TẠO JOB MỚI HOÀN TOÀN
+    new_job = models.HarvestJob(
+        user_id=current_user.id,
+        total_seeds=len(request_data.seeds),
+        target_samples_per_seed=request_data.samples,
+        output_format=request_data.format,
+        prompt=prompt_json,
+        status="pending"
+    )
+    db.add(new_job)
+    db.commit()
+    db.refresh(new_job)
 
-        db.add(new_job)
-        db.commit()
-        db.refresh(new_job)
-        job_to_run = new_job
-
-    background_tasks.add_task(run_harvester_engine, job_to_run.id, request_data, current_user.id)
+    background_tasks.add_task(run_harvester_engine, new_job.id, request_data, current_user.id)
 
     return HarvesterResponse(
         status="processing",
         message=f"Hệ thống đã đưa vào hàng đợi! Dự kiến sinh tối đa {total_samples_expected} mẫu. Hãy sang Trạm Điều Khiển (Dashboard) để xem tiến độ.",
-        job_id=job_to_run.id
+        job_id=new_job.id
     )
 
 @router.post("/stop-harves")

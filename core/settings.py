@@ -26,10 +26,6 @@ class Settings:
     FERNET_KEY = os.getenv("FERNET_KEY", "uE2d3_z6iW-N2U9D8fC6mQ5J8sP0kX2yZ1bH7vN3M4=")
 
     # --- CẤU HÌNH LƯU TRỮ (STORAGE) ---
-    # Google Drive
-    GDRIVE_FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "")
-    GDRIVE_CREDENTIALS_JSON = os.getenv("GDRIVE_CREDENTIALS_JSON", "if_use_this_must_have_credentials")
-
     # S3 (AWS, Cloudflare R2, Supabase...)
     S3_ENDPOINT = os.getenv("S3_ENDPOINT", "")
     S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "")
