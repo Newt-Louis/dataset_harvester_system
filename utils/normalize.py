@@ -5,24 +5,6 @@ def mask_key(raw_key: str) -> str:
         return "***"
     return raw_key[:4] + "..." + raw_key[-4:]
 
-PROVIDER_MODEL_RULES = {
-    "groq": "{p}/{p}/{m}",
-    "cohere": "{m}",
-    "gemini": "{m}",
-    "openrouter": "{m}",
-}
-
-def normalize_model_name(provider: str, model_name: str) -> str:
-    p = provider.lower()
-    m = model_name.lower()
-
-    while m.startswith(f"{p}/"):
-        m = m[len(p) + 1:]
-
-    template = PROVIDER_MODEL_RULES.get(p, "{p}/{m}")
-    return template.format(p=p, m=m)
-
-
 def extract_json_from_text(text: str):
     """Hàm dọn rác mạnh mẽ: Trích xuất mảng JSON kể cả khi bị lẫn văn bản hoặc bị cắt cụt nhẹ"""
     if not text:

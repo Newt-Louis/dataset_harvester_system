@@ -6,7 +6,7 @@ from core.security import get_current_user, encrypt_api_key, decrypt_api_key
 from database import models
 from schemas.payloads import TestModelRequest, ConfigCreate, ConfigResponse, ConfigResponseWithKey
 from services.test_models import run_model_test
-from utils.normalize import mask_key, normalize_model_name
+from utils.normalize import mask_key
 
 router = APIRouter(prefix="/api/configs", tags=["configs"])
 
