@@ -12,57 +12,13 @@ from database.models import ApiConfig
 from services.job_tracker import JobTracker
 from schemas.payloads import HarvesterRequest
 from services.storage_service import StorageManager
+from utils.normalize import extract_json_from_text
 
 # Đảm bảo thư mục lưu file tồn tại
 os.makedirs("downloads", exist_ok=True)
 
 # Khởi tạo Semaphore để giới hạn số luồng gọi API cùng lúc (tránh bị block API Key)
 semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
-
-
-def extract_json_from_text(text: str):
-    """Hàm dọn rác mạnh mẽ: Trích xuất mảng JSON kể cả khi bị lẫn văn bản hoặc bị cắt cụt nhẹ"""
-    if not text:
-        return None
-    
-    try:
-        # 1. Làm sạch các ký tự điều khiển lạ
-        text = text.strip()
-        
-        # 2. Tìm mảng JSON bằng Regex (Tìm từ dấu [ đầu tiên đến dấu ] cuối cùng)
-        match = re.search(r'\[.*\]', text, re.DOTALL)
-        if match:
-            json_str = match.group(0)
-            try:
-                return json.loads(json_str)
-            except json.JSONDecodeError:
-                # 3. Nếu lỗi, thử "vá" nếu AI cắt cụt (thường thiếu ])
-                if not json_str.endswith(']'):
-                    try:
-                        return json.loads(json_str + ']')
-                    except: pass
-                
-                # 4. Thử phương án cuối: Tìm tất cả các object {} bên trong và ghép lại thành mảng
-                try:
-                    objects = re.findall(r'\{.*?\}', json_str, re.DOTALL)
-                    parsed_objects = [json.loads(obj) for obj in objects]
-                    if parsed_objects:
-                        return parsed_objects
-                except: pass
-        
-        # 5. Backup: Nếu không thấy [], thử tìm {} đầu tiên và cuối cùng
-        match_obj = re.search(r'\{.*\}', text, re.DOTALL)
-        if match_obj:
-            try:
-                data = json.loads(match_obj.group(0))
-                return [data] if isinstance(data, dict) else data
-            except: pass
-
-        return None
-    except Exception as e:
-        print(f"DEBUG: Lỗi extract JSON: {e}")
-        return None
-
 
 async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: int):
     """Hàm chạy nền: Lấy Key từ DB, xoay vòng API, cập nhật tiến độ"""

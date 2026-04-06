@@ -7,6 +7,23 @@ class APIConfig(BaseModel):
     modelName: str
     isActive: bool = True
 
+class ConfigCreate(BaseModel):
+    provider: str
+    api_key: str
+    model_name: str
+
+class ConfigResponse(BaseModel):
+    id: int
+    provider: str
+    model_name: str
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+class ConfigResponseWithKey(ConfigResponse):
+    api_key_masked: str
+
 class SeedItem(BaseModel):
     """Một phần tử hạt giống bao gồm Bối cảnh và Chiến thuật tương ứng"""
     context: str = Field(default="", description="Bối cảnh Schema (có thể để trống)")

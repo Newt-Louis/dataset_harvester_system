@@ -5,20 +5,7 @@ from litellm.exceptions import AuthenticationError, RateLimitError, ContextWindo
 from core.settings import settings
 from core.security import decrypt_api_key
 from schemas.payloads import TestModelRequest
-
-def extract_json_from_text(text: str):
-    """Hàm dọn rác: Cắt bỏ các text thừa của AI để lấy đúng mảng JSON"""
-    try:
-        text = re.sub(r'`{3}(?:json)?', '', text).strip()
-        return json.loads(text)
-    except json.JSONDecodeError:
-        match = re.search(r'\[.*\]', text, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except:
-                pass
-        return None
+from utils.normalize import extract_json_from_text
 
 async def run_model_test(model_name: str, api_key: str, payload: TestModelRequest):
     full_prompt = f"""
