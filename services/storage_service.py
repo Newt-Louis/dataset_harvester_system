@@ -63,7 +63,7 @@ class StorageManager:
 
     @staticmethod
     def _upload_to_s3(file_path: str, file_name: str, format_type: str, username: str) -> str:
-        """Bắn file lên S3 vào thư mục mang tên username"""
+        """Đẩy file lên S3 vào thư mục tên username"""
         s3_client = boto3.client('s3',
                                  endpoint_url=settings.S3_ENDPOINT,
                                  aws_access_key_id=settings.S3_ACCESS_KEY,
@@ -84,7 +84,7 @@ class StorageManager:
 
     @classmethod
     def finalize_dataset(cls, tracker, format_type: str):
-        """Hàm chốt sổ: Đẩy file lên S3 (nếu có) hoặc giữ nguyên local"""
+        """Đẩy file lên S3 (nếu có) hoặc giữ nguyên local"""
         # Lấy username từ quan hệ owner của Job
         username = tracker.job.owner.username or f"user_{tracker.job.user_id}"
         user_dir = os.path.join(cls.LOCAL_DATA_DIR, username)
@@ -96,7 +96,7 @@ class StorageManager:
 
         file_name = f"dataset_job_{tracker.job_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format_type}"
 
-        # THỬ S3
+        # Try S3
         if HAS_S3 and settings.S3_BUCKET_NAME and settings.S3_ACCESS_KEY:
             try:
                 print(f"☁️ Đang tải file lên S3 cho user {username}...")
@@ -106,5 +106,5 @@ class StorageManager:
             except Exception as e:
                 print(f"⚠️ Lỗi S3 ({e}). Giữ file local.")
 
-        # NẾU KHÔNG CÓ S3 -> TRẢ VỀ LINK DOWNLOAD LOCAL QUA API
+        # Nếu không có S3 --> trả về link dowmload local
         tracker.mark_completed_with_data("", format_type)

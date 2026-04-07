@@ -42,7 +42,7 @@ async def generate_dataset(request_data: HarvesterRequest, background_tasks: Bac
         state = models.HarvesterState(user_id=current_user.id)
         db.add(state)
 
-    # Đóng gói Role và Constraints thành 1 cục JSON để lưu vào cột "prompt"
+    # Đóng gói Role và Constraints thành 1 JSON để lưu vào cột "prompt"
     prompt_json = json.dumps({
         "role_prompt": request_data.role_prompt,
         "constraints_prompt": request_data.constraints_prompt
@@ -59,14 +59,12 @@ async def generate_dataset(request_data: HarvesterRequest, background_tasks: Bac
     state.delay = request_data.delay
     db.commit()
 
-    # XÓA TẤT CẢ JOB CŨ CỦA USER NÀY (Đảm bảo cơ chế 1 User - 1 Job duy nhất)
     old_jobs = db.query(models.HarvestJob).filter(models.HarvestJob.user_id == current_user.id).all()
     for oj in old_jobs:
         StorageManager.delete_job_files(current_user.username or f"user_{current_user.id}", oj.id)
         db.delete(oj)
     db.commit()
 
-    # TẠO JOB MỚI HOÀN TOÀN
     new_job = models.HarvestJob(
         user_id=current_user.id,
         total_seeds=len(request_data.seeds),
@@ -106,12 +104,12 @@ async def stop_harvesting(db: Session = Depends(get_db), current_user: models.Us
 
 @router.get("/jobs/{job_id}/download")
 async def download_job_result(job_id: int, format: str = "jsonl", db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_user)):
-    # 1. Kiểm tra Job có thuộc về User này không
+    # Kiểm tra Job có thuộc về User này không
     job = db.query(models.HarvestJob).filter(models.HarvestJob.id == job_id, models.HarvestJob.user_id == current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Không tìm thấy yêu cầu thu hoạch này.")
 
-    # 2. Đường dẫn file cục bộ theo username
+    # Đường dẫn file cục bộ theo username
     username = current_user.username or f"user_{current_user.id}"
     file_path = f"downloads/{username}/dataset_job_{job_id}.{format}"
 

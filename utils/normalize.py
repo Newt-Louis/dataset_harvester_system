@@ -6,7 +6,7 @@ def mask_key(raw_key: str) -> str:
     return raw_key[:4] + "..." + raw_key[-4:]
 
 def extract_json_from_text(text: str):
-    """Hàm dọn rác mạnh mẽ: Trích xuất mảng JSON kể cả khi bị lẫn văn bản hoặc bị cắt cụt nhẹ"""
+    """Hàm dọn rác: Trích xuất mảng JSON kể cả khi bị lẫn văn bản hoặc bị cắt cụt"""
     if not text:
         return None
 

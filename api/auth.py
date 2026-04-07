@@ -8,9 +8,6 @@ from core import security
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-# ---------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------
 class RegisterRequest(BaseModel):
     email: str
     password: str

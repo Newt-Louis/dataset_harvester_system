@@ -53,7 +53,6 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                 tracker.add_log("Dừng chương trình theo yêu cầu.")
                 break
 
-            # --- KIỂM TRA TẤT CẢ MODEL CẠN KIỆT (Task 2) ---
             if len(working_keys) == 0:
                 msg = f"Tất cả API Key ({len(active_configs)}) đều đạt giới hạn hoặc lỗi. Dừng tại hạt giống #{seed_idx + 1}."
                 tracker.mark_failed(msg)
@@ -103,11 +102,9 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                         total_generated_samples += len(parsed_data)
                         seed_success = True
                         keys_tried_for_this_seed = 0
-                        
-                        # XOAY VÒNG KEY
+
                         current_key_idx = (current_key_idx + 1) % len(working_keys)
-                        
-                        # SỬ DỤNG DELAY TÙY CHỈNH (Task 3)
+
                         await asyncio.sleep(request.delay) 
                     else:
                         raise Exception("AI trả về sai định dạng JSON.")
@@ -127,7 +124,6 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                     current_key_idx = (current_key_idx + 1) % len(working_keys)
                     await asyncio.sleep(2)
 
-        # --- XÁC ĐỊNH TRẠNG THÁI CUỐI CÙNG TRƯỚC KHI CẮT SEED ---
         if total_generated_samples > 0:
             StorageManager.finalize_dataset(tracker, request.format)
             if tracker.job.status not in ["completed", "stopped"]:
@@ -137,20 +133,16 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
             if tracker.job.status not in ["stopped", "failed"]:
                 tracker.mark_failed("Quá trình chạy hoàn tất nhưng không sinh được dữ liệu hợp lệ nào.")
 
-        # --- CẬP NHẬT STATE & CẮT SEED (Sau khi đã có status chính xác) ---
         state = db.query(models.HarvesterState).filter(models.HarvesterState.user_id == user_id).first()
         if state and state.seeds:
             try:
                 original_seeds = json.loads(state.seeds)
-                db.refresh(tracker.job) # Lấy status mới nhất vừa cập nhật ở trên
+                db.refresh(tracker.job)
 
                 if tracker.job.status == "completed":
-                    # Xong hết sạch -> Clear mảng
                     state.seeds = "[]"
                     tracker.add_log("Đã hoàn thành toàn bộ hạt giống. Danh sách đã được làm trống.")
                 else:
-                    # Bị dừng/lỗi -> Cắt bỏ những hạt giống ĐÃ xử lý xong hoàn toàn
-                    # tracker.job.current_seed_index là 1-based index
                     new_seeds = original_seeds[tracker.job.current_seed_index - 1:]
                     state.seeds = json.dumps(new_seeds, ensure_ascii=False)
                     tracker.add_log(f"Đã lưu lại {len(new_seeds)} hạt giống chưa hoàn thành.")
