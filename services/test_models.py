@@ -44,7 +44,7 @@ async def run_model_test(model_name: str, api_key: str, payload: TestModelReques
             )
 
     except AuthenticationError as e:
-        raise HTTPException(status_code=401, detail=f"Lỗi Xác thực (API Key không hợp lệ hoặc đã bị khóa):\n{str(e)}")
+        raise HTTPException(status_code=400, detail=f"Lỗi Xác thực (API Key không hợp lệ hoặc đã bị khóa):\n{str(e)}")
 
     except RateLimitError as e:
         raise HTTPException(status_code=429,

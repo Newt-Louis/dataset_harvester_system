@@ -38,7 +38,10 @@ def add_config(
     db: Session = Depends(get_db)
 ):
     prefix = req.provider.lower()
-    normalized = prefix+ '/' +req.model_name
+    if(prefix == "openai"):
+        normalized = req.model_name
+    else:
+        normalized = prefix+ '/' +req.model_name
     """Thêm config mới cho user hiện tại."""
     config = models.ApiConfig(
         user_id=current_user.id,
