@@ -89,7 +89,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                             api_key=real_api_key,
                             temperature=0.8,
                             timeout=600,
-                            max_tokens=50000
+                            max_tokens=8192
                         )
 
                     raw_text = response.choices[0].message.content
@@ -107,7 +107,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
 
                         await asyncio.sleep(request.delay) 
                     else:
-                        raise Exception("AI trả về sai định dạng JSON.")
+                        raise Exception(f"AI trả về sai định dạng JSON.{parsed_data}")
 
                 except (AuthenticationError, RateLimitError) as e:
                     error_msg = str(e).lower()
@@ -119,7 +119,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                          current_key_idx = (current_key_idx + 1) % len(working_keys)
                          await asyncio.sleep(5)
                 except Exception as e:
-                    tracker.add_log(f"Lỗi kết nối model {config.model_name}. Thử model khác...")
+                    tracker.add_log(f"Lỗi kết nối model {config.model_name}. Thử model khác... {e}")
                     keys_tried_for_this_seed += 1
                     current_key_idx = (current_key_idx + 1) % len(working_keys)
                     await asyncio.sleep(2)
