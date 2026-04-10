@@ -87,9 +87,9 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                             model=config.model_name,
                             messages=[{"role": "user", "content": current_prompt}],
                             api_key=real_api_key,
-                            temperature=0.7,
-                            timeout=120,
-                            max_tokens=8192
+                            temperature=0.8,
+                            timeout=600,
+                            max_tokens=50000
                         )
 
                     raw_text = response.choices[0].message.content
