@@ -7,6 +7,7 @@ from services.llm_engine import run_harvester_engine
 from database.database import get_db
 from database import models
 from core import security
+from core.prompts import PromptEngine
 from services.storage_service import StorageManager
 
 router = APIRouter(prefix="/api/harvesting", tags=["Harvesting"])
@@ -35,6 +36,13 @@ async def generate_dataset(request_data: HarvesterRequest, background_tasks: Bac
     ).count()
     if active_keys == 0:
         raise HTTPException(status_code=400, detail="Bạn chưa bật API Key nào trong phần Cấu hình!")
+
+    try:
+        normalized_schema = PromptEngine.normalize_schema_definition(request_data.schema_definition)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    request_data.schema_definition = normalized_schema
+
     total_samples_expected = request_data.samples * len(request_data.seeds)
 
     state = db.query(models.HarvesterState).filter(models.HarvesterState.user_id == current_user.id).first()

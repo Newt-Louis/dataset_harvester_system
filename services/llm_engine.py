@@ -5,7 +5,7 @@ from litellm.exceptions import AuthenticationError, RateLimitError, ContextWindo
 import database.models as models
 from api.logs import write_system_log
 from core.settings import settings
-from core.prompts import build_dynamic_prompt
+from core.prompts import PromptEngine
 from core.security import decrypt_api_key
 from database.database import SessionLocal
 from database.models import ApiConfig
@@ -65,7 +65,6 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
 
             seed_success = False
             keys_tried_for_this_seed = 0
-            current_prompt = build_dynamic_prompt(request, current_seed)
 
             while not seed_success and keys_tried_for_this_seed < len(working_keys):
                 db.refresh(tracker.job)
@@ -81,23 +80,32 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                 tracker.update_model(config.model_name)
 
                 try:
-                    tracker.add_log(f"Đang gọi {config.provider} ({config.model_name})...")
+                    plan = PromptEngine.build_generation_plan(
+                        request=request,
+                        current_seed=current_seed,
+                        provider=config.provider,
+                        model_name=config.model_name,
+                        api_key=real_api_key,
+                        timeout=600,
+                        max_tokens=8192,
+                        temperature=0.8,
+                    )
+                    call_kwargs = plan["call_kwargs"]
+                    native_structured_output = plan["native_structured_output"]
+                    mode_label = "native structured output" if native_structured_output else "prompt fallback"
+                    tracker.add_log(f"Đang gọi {config.provider} ({config.model_name}) [{mode_label}]...")
                     async with semaphore:
-                        response = await acompletion(
-                            model=config.model_name,
-                            messages=[{"role": "user", "content": current_prompt}],
-                            api_key=real_api_key,
-                            temperature=0.8,
-                            timeout=600,
-                            max_tokens=8192
-                        )
+                        response = await acompletion(**call_kwargs)
 
-                    raw_text = response.choices[0].message.content
-                    parsed_data = extract_json_from_text(raw_text)
+                    parsed_data = PromptEngine.parse_and_validate_dataset(
+                        response=response,
+                        schema_definition=request.schema_definition,
+                        expected_count=request.samples,
+                    )
 
                     if parsed_data and isinstance(parsed_data, list):
                         StorageManager.append_to_local_file(job_id, parsed_data, request.format, username)
-                        
+
                         tracker.add_progress(len(parsed_data))
                         total_generated_samples += len(parsed_data)
                         seed_success = True
@@ -105,7 +113,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
 
                         current_key_idx = (current_key_idx + 1) % len(working_keys)
 
-                        await asyncio.sleep(request.delay) 
+                        await asyncio.sleep(request.delay)
                     else:
                         raise Exception(f"AI trả về sai định dạng JSON.{parsed_data}")
 

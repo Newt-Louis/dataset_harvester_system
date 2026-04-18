@@ -24,14 +24,23 @@ async def run_model_test(model_name: str, api_key: str, payload: TestModelReques
     """
 
     try:
-        response = await acompletion(
-            model=model_name,
-            messages=[{"role": "user", "content": full_prompt}],
-            api_key=api_key,
-            temperature=0.7,
-            timeout=30
-        )
+        # Fix lỗi openai từ phiên bản gpt-5 không nhận tham số temperature nữa !!
+        call_kwargs = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": full_prompt}],
+            "api_key": api_key,
+            "timeout": 600,
+            "max_tokens": 8192,
+        }
 
+        if "gpt-5" not in model_name:
+            call_kwargs["temperature"] = 0.8
+        elif "gpt-5.1" in model_name:
+            call_kwargs["max_tokens"] = 65536
+            pass
+
+        response = await acompletion(**call_kwargs)
+        print(response)
         raw_text = response.choices[0].message.content
         parsed_data = extract_json_from_text(raw_text)
 
