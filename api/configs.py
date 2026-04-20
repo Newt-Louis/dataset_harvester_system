@@ -38,10 +38,7 @@ def add_config(
     db: Session = Depends(get_db)
 ):
     prefix = req.provider.lower()
-    if(prefix == "openai"):
-        normalized = req.model_name
-    else:
-        normalized = prefix+ '/' +req.model_name
+    normalized = prefix+ '/' +req.model_name
     """Thêm config mới cho user hiện tại."""
     config = models.ApiConfig(
         user_id=current_user.id,
@@ -120,7 +117,7 @@ async def test_model_connection(
     real_api_key = decrypt_api_key(config.api_key) # type: ignore[arg-type]
 
     result = await run_model_test(
-        model_name=config.model_name, # type: ignore[arg-type]
+        model=config, # type: ignore[arg-type]
         api_key=real_api_key,
         payload=req
     )

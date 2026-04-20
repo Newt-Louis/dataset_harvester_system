@@ -344,14 +344,14 @@ class PromptEngine:
 
         text = text.strip()
 
-        # 1) parse toàn bộ text
+        # parse toàn bộ text
         try:
             parsed = json.loads(text)
             return cls._unwrap_dataset(parsed)
         except Exception:
             pass
 
-        # 2) parse code block json
+        # parse code block json
         code_blocks = re.findall(r"```(?:json)?\s*([\s\S]*?)```", text)
         for block in reversed(code_blocks):
             try:
@@ -362,7 +362,7 @@ class PromptEngine:
             except Exception:
                 pass
 
-        # 3) quét raw JSON value đầu tiên giải mã được
+        # quét raw JSON value đầu tiên giải mã được
         decoder = json.JSONDecoder()
         for idx, ch in enumerate(text):
             if ch not in "[{":
@@ -391,7 +391,7 @@ class PromptEngine:
         return None
 
     @classmethod
-    def parse_and_validate_dataset(cls, response, schema_definition: str, expected_count: int) -> List[dict]:
+    def parse_and_validate_dataset(cls, response, schema_definition: str) -> List[dict]:
         raw_text = cls.extract_response_text(response)
         if not raw_text:
             raise ValueError("AI không trả về nội dung text hợp lệ để trích xuất JSON.")
@@ -403,19 +403,13 @@ class PromptEngine:
         schema_object = cls.validate_schema_definition(schema_definition)
         return cls.validate_dataset_against_schema(
             data=parsed_data,
-            schema_object=schema_object,
-            expected_count=expected_count,
+            schema_object=schema_object
         )
 
     @classmethod
-    def validate_dataset_against_schema(cls, data: Any, schema_object: dict, expected_count: int) -> List[dict]:
+    def validate_dataset_against_schema(cls, data: Any, schema_object: dict) -> List[dict]:
         if not isinstance(data, list):
             raise ValueError("Output phải là một JSON Array.")
-
-        if len(data) != expected_count:
-            raise ValueError(
-                f"Output phải có đúng {expected_count} phần tử, nhưng hiện tại nhận được {len(data)}."
-            )
 
         validated = []
         for idx, item in enumerate(data):

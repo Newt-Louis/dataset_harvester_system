@@ -51,4 +51,5 @@ class TestModelRequest(BaseModel):
     role_prompt: str
     constraints_prompt: str
     schema_definition: str
+    samples: int = 10
     seed: TestSeedItem

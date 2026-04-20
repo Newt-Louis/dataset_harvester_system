@@ -2,12 +2,10 @@ import asyncio, json, re, os, csv
 from fastapi import HTTPException
 from litellm import acompletion
 from litellm.exceptions import AuthenticationError, RateLimitError, ContextWindowExceededError
-from core.settings import settings
-from core.security import decrypt_api_key
 from schemas.payloads import TestModelRequest
 from utils.normalize import extract_json_from_text
 
-async def run_model_test(model_name: str, api_key: str, payload: TestModelRequest):
+async def run_model_test(model, api_key: str, payload: TestModelRequest):
     full_prompt = f"""
     {payload.role_prompt}
 
@@ -26,21 +24,17 @@ async def run_model_test(model_name: str, api_key: str, payload: TestModelReques
     try:
         # Fix lỗi openai từ phiên bản gpt-5 không nhận tham số temperature nữa !!
         call_kwargs = {
-            "model": model_name,
+            "model": model.model_name,
             "messages": [{"role": "user", "content": full_prompt}],
             "api_key": api_key,
             "timeout": 600,
-            "max_tokens": 8192,
+            "max_tokens": 80000,
         }
 
-        if "gpt-5" not in model_name:
+        if "gpt-5" not in model.model_name:
             call_kwargs["temperature"] = 0.8
-        elif "gpt-5.1" in model_name:
-            call_kwargs["max_tokens"] = 65536
-            pass
 
         response = await acompletion(**call_kwargs)
-        print(response)
         raw_text = response.choices[0].message.content
         parsed_data = extract_json_from_text(raw_text)
 
@@ -49,7 +43,7 @@ async def run_model_test(model_name: str, api_key: str, payload: TestModelReques
         else:
             raise HTTPException(
                 status_code=422,
-                detail=f"Model phản hồi nhưng sai định dạng JSON.\n\nRaw response:\n{raw_text}"
+                detail=f"Model phản hồi nhưng sai định dạng JSON.\n\nRaw response:\n{response}"
             )
 
     except AuthenticationError as e:

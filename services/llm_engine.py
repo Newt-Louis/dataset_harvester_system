@@ -12,7 +12,6 @@ from database.models import ApiConfig
 from services.job_tracker import JobTracker
 from schemas.payloads import HarvesterRequest
 from services.storage_service import StorageManager
-from utils.normalize import extract_json_from_text
 
 # Đảm bảo thư mục lưu file tồn tại
 os.makedirs("downloads", exist_ok=True)
@@ -87,7 +86,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                         model_name=config.model_name,
                         api_key=real_api_key,
                         timeout=600,
-                        max_tokens=8192,
+                        max_tokens=80000,
                         temperature=0.8,
                     )
                     call_kwargs = plan["call_kwargs"]
@@ -99,8 +98,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
 
                     parsed_data = PromptEngine.parse_and_validate_dataset(
                         response=response,
-                        schema_definition=request.schema_definition,
-                        expected_count=request.samples,
+                        schema_definition=request.schema_definition
                     )
 
                     if parsed_data and isinstance(parsed_data, list):
