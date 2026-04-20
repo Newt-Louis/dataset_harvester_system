@@ -86,7 +86,7 @@ async def run_harvester_engine(job_id: int, request: HarvesterRequest, user_id: 
                         model_name=config.model_name,
                         api_key=real_api_key,
                         timeout=600,
-                        max_tokens=80000,
+                        max_tokens=32768,
                         temperature=0.8,
                     )
                     call_kwargs = plan["call_kwargs"]
