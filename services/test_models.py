@@ -28,7 +28,7 @@ async def run_model_test(model, api_key: str, payload: TestModelRequest):
             "messages": [{"role": "user", "content": full_prompt}],
             "api_key": api_key,
             "timeout": 600,
-            "max_tokens": 80000,
+            "max_tokens": 32768,
         }
 
         if "gpt-5" not in model.model_name:
